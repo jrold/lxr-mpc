@@ -48,8 +48,10 @@ extern void DMA1_Stream5_IRQHandler(void);
 extern void USART3_IRQHandler(void);
 int volt_panel_knob(int index, VoltKnob *out);
 void volt_panel_flush(void);
-int volt_panel_lock_armed(void);
-int volt_panel_lockable(void);
+int volt_panel_voice(void);
+int volt_panel_voice_knob(int voice, int index, VoltKnob *out);
+void volt_panel_set_param(int param, int value);
+void volt_panel_repaint(void);
 
 /* ---- clocks and time */
 volatile uint32_t volt_primask;
@@ -747,6 +749,23 @@ static void apply_keys(void)
     }
 }
 
+/* Parameter writes (set_param), applied on the main loop as the firmware's
+ * own knob handler would, then one repaint for the lot. */
+static struct { uint16_t param; uint8_t value; } param_queue[512];
+static unsigned param_head, param_tail;
+
+static void apply_params(void)
+{
+    if (param_head == param_tail)
+        return;
+    while (param_head != param_tail)
+    {
+        volt_panel_set_param(param_queue[param_head].param, param_queue[param_head].value);
+        param_head = (param_head + 1) % (sizeof param_queue / sizeof param_queue[0]);
+    }
+    volt_panel_repaint();
+}
+
 void volt_board_main_pass(void)
 {
     if (!booted)
@@ -755,6 +774,7 @@ void volt_board_main_pass(void)
         yield_to_host();   /* boot() returns: the firmware is at its main loop */
     }
     apply_keys();
+    apply_params();
     int busy = 0;
     for (int k = 0; k < VOLT_KNOBS; k++)
         busy |= knob_step(k);
@@ -989,14 +1009,24 @@ static void midi_queue_at(const uint8_t *bytes, int count, uint64_t at)
     }
 }
 
-static int api_lock_armed(void)
+static int api_voice(void)
 {
-    return booted && fw_alive && !fw_running && volt_panel_lock_armed();
+    return booted && fw_alive && !fw_running ? volt_panel_voice() : -1;
 }
 
-static int api_lockable(void)
+static int api_voice_knob(int voice, int index, VoltKnob *out)
 {
-    return booted && fw_alive && !fw_running && volt_panel_lockable();
+    return booted && fw_alive && !fw_running && volt_panel_voice_knob(voice, index, out);
+}
+
+static void api_set_param(int param, int value)
+{
+    const unsigned next = (param_tail + 1) % (sizeof param_queue / sizeof param_queue[0]);
+    if (param < 0 || param > 0xFFFF || next == param_head)
+        return;
+    param_queue[param_tail].param = (uint16_t)param;
+    param_queue[param_tail].value = (uint8_t)(value < 0 ? 0 : value > 255 ? 255 : value);
+    param_tail = next;
 }
 
 static void api_midi(const uint8_t *bytes, int count)
@@ -1024,7 +1054,7 @@ __attribute__((visibility("default"))) const VoltMachineApi *volt_machine_api(vo
         VOLT_MACHINE_API_VERSION,
         api_card_write, api_card_read, api_card_next, api_card_version, api_flush,
         api_boot, api_render,
-        api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_lock_armed, api_lockable, api_midi, api_midi_at,
+        api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_voice, api_voice_knob, api_set_param, api_midi, api_midi_at,
         api_lcd, api_lcd_glyphs, api_lcd_version, api_leds, api_led_version,
     };
     return &api;

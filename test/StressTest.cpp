@@ -1,9 +1,9 @@
-// StressTest.cpp: VOLTKIT played the way a person plays it, at random, with
-// the MPC's transport running: taps on DRUM 1's step keys, double taps to
-// lock, page keys, knob turns, letting go, and the occasional skin echo.
-// After every run: no step key reads lit, DRUM 1's steps are the ones tapped
-// and no other voice has gained a step. Odd runs also press VOICE, PERF and
-// REC; there only the first holds.
+// StressTest.cpp: VOLTKIT played the way a person plays it, at random: voice
+// and page keys touched as the MPC touches them, knobs and Q-Links turned, ALL
+// on and off. After each time ALL goes off, every voice reads, on every page
+// and screen, what it read when ALL came on (a knob turned without ALL, or
+// one ALL doesn't take, meanwhile drops that check); after every run, no step of any voice is set
+// (the LXR's sequencer has no keys).
 //
 //   VOLTKIT_ENGINE=<engine library> VOLTKIT_CARD=data/card.vkc voltkit-stress-test [runs] [first run]
 //
@@ -14,99 +14,131 @@ extern "C" {
 int mpc_engine_changed(void* inst, char* key, int len);
 }
 
+#include <algorithm>
 #include <array>
-#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <map>
 #include <random>
 #include <string>
-#include <vector>
+#include <tuple>
 
 namespace
 {
 const mpc_engine_t* E = nullptr;
 constexpr int kBlock = 128;
 constexpr int kRate = 44100;
-constexpr std::array<int, 16> kSteps { 39, 38, 37, 36, 31, 30, 29, 28, 23, 22, 21, 20, 15, 14, 13, 12 };
+constexpr std::array<int, 7> kVoices { 1, 2, 3, 4, 5, 6, 7 };
 constexpr std::array<int, 8> kPages { 16, 17, 18, 19, 8, 9, 10, 11 };   // OSC AEG MOD FM CLICK FILTER LFO MIX
-constexpr int kVoiceMode = 24, kPerfMode = 25, kRec = 34;
+constexpr std::array<int, 16> kSteps { 39, 38, 37, 36, 31, 30, 29, 28, 23, 22, 21, 20, 15, 14, 13, 12 };
 std::string dataDir;
+using Everything = std::map<std::tuple<int, int, int>, std::array<std::string, 4>>;
 
 struct Track
 {
     void* inst = nullptr;
-    double ppq = 0.0, bpm = 120.0;
-    bool playing = false;
-    double now = 0.0;                  // seconds rendered
-    std::array<double, 41> touchedAt {};   // each key's last touch
-
-    // Two touches on a key closer than a double tap's time are one (the MPC's
-    // Double Click, which a single tap or grab here doesn't send): wait it out.
-    void apart(const int b)
-    {
-        const double wait = touchedAt[static_cast<std::size_t>(b)] + 0.45 - now;
-        if (wait > 0.0)
-            run(wait);
-    }
+    int voice = 1, page = 16, screen = 0;   // what the test has shown
+    std::mt19937* rng = nullptr;
 
     Track() { inst = E->create(dataDir.c_str()); }
     ~Track() { E->destroy(inst); }
     void set(const std::string& k, const double v) { E->set_param(inst, k.c_str(), std::to_string(v).c_str()); }
-    double num(const std::string& k)
+    std::string text(const std::string& k)
     {
         char buf[256];
-        return E->get_param(inst, k.c_str(), buf, sizeof buf) > 0 ? std::atof(buf) : 0.0;
+        return E->get_param(inst, k.c_str(), buf, sizeof buf) > 0 ? buf : "";
     }
+    double num(const std::string& k) { return std::atof(text(k).c_str()); }
     void run(const double seconds)
     {
         const int blocks = static_cast<int>(seconds * kRate / kBlock + 0.5);
         std::int16_t out[kBlock * 2];
         for (int b = 0; b < blocks; ++b)
         {
-            E->song_pos(inst, ppq, bpm, playing ? 1 : 0, kBlock);
             E->render(inst, out, kBlock);
-            now += static_cast<double>(kBlock) / kRate;
-            if (playing)
-                ppq += kBlock / (60.0 / bpm * kRate);
             char key[64];
             while (mpc_engine_changed(inst, key, sizeof key))
                 ;
         }
     }
-    bool led(const int l)
-    {
-        char k[8];
-        std::snprintf(k, sizeof k, "led_%02d", l);
-        return num(k) > 0.5;
-    }
-    std::string btn(const int b) const
+    static std::string btn(const int b)
     {
         char k[8];
         std::snprintf(k, sizeof k, "btn_%02d", b);
         return k;
     }
     // A skin key's touch, as the MPC sets it: its Mouse Down flips the value
-    // shown, its Button sets 1, `echo` seconds later
-    void touch(const int b, const double echo)
+    // shown, its Button sets 1 up to 120 ms later; then the finger is off it
+    // long enough not to be a double tap
+    void touch(const int b)
     {
-        touchedAt[static_cast<std::size_t>(b)] = now;
         set(btn(b), 1.0 - num(btn(b)));
-        if (echo > 0.0)
-            run(echo);
+        run(0.003 * static_cast<int>((*rng)() % 40));
         set(btn(b), 1.0);
+        run(0.2);
     }
-    void tap(const int b, const double echo = 0.0) { touch(b, echo); }
-    std::string steps(const int voice)
+    void showVoice(const int v)
     {
-        set(btn(1 + voice), 1.0);   // the voice key: its steps on the step LEDs
-        run(0.05);
+        touch(v);
+        voice = v;
+    }
+    // A page key: its first screen, or, shown already, its other screen
+    void showPage(const int p)
+    {
+        touch(p);
+        screen = p == page ? 1 - screen : 0;
+        page = p;
+    }
+    std::string lcd()
+    {
         std::string s;
-        for (const int b : kSteps)
-            s += led(b) ? 'X' : '.';
+        for (int c = 0; c < 32; ++c)
+        {
+            char k[8];
+            std::snprintf(k, sizeof k, "lcd_%02d", c);
+            const int code = static_cast<int>(num(k));
+            s += code >= 32 && code < 127 ? static_cast<char>(code) : '?';
+        }
         return s;
     }
+    std::array<std::string, 4> knobs()
+    {
+        return { text("knob1_display"), text("knob2_display"), text("knob3_display"), text("knob4_display") };
+    }
+
+    // Every voice's knobs on every page and screen; the voice, page and
+    // screen shown are back as they were after.
+    Everything everything()
+    {
+        const int v0 = voice, p0 = page, s0 = screen;
+        Everything all;
+        for (const int v : kVoices)
+        {
+            showVoice(v);
+            for (const int p : kPages)
+            {
+                showPage(p);
+                if (screen != 0)
+                    showPage(p);
+                all[{ v, p, 0 }] = knobs();
+                const std::string first = lcd();
+                showPage(p);
+                if (lcd() != first)
+                    all[{ v, p, 1 }] = knobs();
+                else
+                    screen = 0;   // no second screen: the key left it on the first
+            }
+        }
+        showVoice(v0);
+        showPage(p0);
+        if (screen != s0)
+            showPage(p0);
+        return all;
+    }
 };
+
+std::string row(const std::array<std::string, 4>& k) { return k[0] + " " + k[1] + " " + k[2] + " " + k[3]; }
 }
 
 int main(int argc, char** argv)
@@ -119,142 +151,91 @@ int main(int argc, char** argv)
     dataDir = (std::filesystem::temp_directory_path() / "voltkit-stress-test").string();
     std::filesystem::remove_all(dataDir);
     std::filesystem::create_directories(dataDir);
-    std::setvbuf(stdout, nullptr, _IONBF, 0);   // in order with the adapter's key log (stderr)
+    std::setvbuf(stdout, nullptr, _IONBF, 0);
     E = mpc_engine();
-    const int runs = argc > 1 ? std::atoi(argv[1]) : 20;
+    const int runs = argc > 1 ? std::atoi(argv[1]) : 10;
+    const int first = argc > 2 ? std::atoi(argv[2]) : 0;
     int failures = 0;
 
-    const int first = argc > 2 ? std::atoi(argv[2]) : 0;   // [runs] [first run]
     for (int run = first; run < first + runs; ++run)
     {
         std::mt19937 rng(static_cast<unsigned>(1000 + run));
         const auto pick = [&](const int n) { return static_cast<int>(rng() % static_cast<unsigned>(n)); };
-        const auto finger = [&] { return 0.003 * pick(40); };   // the Button's set after the Mouse Down's
         Track t;
+        t.rng = &rng;
         t.run(1.0);
-        t.set("btn_01", 1.0);   // DRUM 1
-        t.run(0.05);
-        std::array<bool, 16> want {};
-        int held = -1;
-        std::string log;
-        // odd runs also change modes (VOICE, PERF: its step keys 1 to 8 roll a voice, 9 to
-        // 16 change patterns) and REC; there, what the steps should be is the firmware's,
-        // and the check is that no key is left held
-        const bool modes = run % 2 == 1;
-        t.playing = pick(2) == 0;
-        for (int action = 0; action < 60; ++action)
+        t.showVoice(1);
+        t.showPage(16);
+        bool ok = true;
+        std::string log, report;
+        Everything snapshot;
+        for (int action = 0; action < 40; ++action)
         {
             const int what = pick(10);
-            char line[96];
-            if (what <= 2 && held < 0)   // a step tapped
+            const bool all = t.num("all") > 0.5;
+            if (what <= 1)
             {
-                const int s = pick(16);
-                t.apart(kSteps[static_cast<std::size_t>(s)]);
-                t.tap(kSteps[static_cast<std::size_t>(s)], finger());
-                want[static_cast<std::size_t>(s)] = !want[static_cast<std::size_t>(s)];
-                std::snprintf(line, sizeof line, "tap %d; ", s + 1);
+                t.showVoice(kVoices[static_cast<std::size_t>(pick(7))]);
+                log += "voice " + std::to_string(t.voice) + "; ";
             }
-            else if (what == 3 && held < 0)   // a double tap: grab it
+            else if (what <= 3)
             {
-                const int s = pick(16);
-                const int b = kSteps[static_cast<std::size_t>(s)];
-                t.apart(b);
-                t.tap(b, finger());
-                t.run(0.05 + 0.003 * pick(80));   // to the second touch: its Double Click, then its Button
-                t.touchedAt[static_cast<std::size_t>(b)] = t.now;
-                t.set(t.btn(b), 1.0 - t.num(t.btn(b)));
-                char k[8];
-                std::snprintf(k, sizeof k, "lock_%02d", b);
-                t.set(k, 1.0);
-                t.run(finger());
-                t.set(t.btn(b), 1.0);
-                held = s;
-                std::snprintf(line, sizeof line, "grab %d; ", s + 1);
+                t.showPage(kPages[static_cast<std::size_t>(pick(8))]);
+                log += "page " + std::to_string(t.page) + (t.screen ? "b; " : "; ");
             }
-            else if (what == 4)   // a page key
-            {
-                const int p = pick(8);
-                t.tap(kPages[static_cast<std::size_t>(p)], finger());
-                std::snprintf(line, sizeof line, "page %d; ", p);
-            }
-            else if (what <= 6)   // a knob or a Q-Link
+            else if (what <= 6)
             {
                 const int k = 1 + pick(4);
                 const std::string key = "knob" + std::to_string(k);
-                t.set(key, std::clamp(t.num(key) + (pick(2) ? 1 : -1) * (1 + pick(20)) / 127.0, 0.0, 1.0));
-                std::snprintf(line, sizeof line, "knob%d; ", k);
+                const bool taken = t.num(key + "_all") > 0.5;
+                t.set(key, std::clamp(t.num(key) + (pick(2) ? 1 : -1) * (1 + pick(30)) / 127.0, 0.0, 1.0));
+                t.run(0.05);
+                if (!all || !taken)
+                    snapshot.clear();   // a change of its own
+                log += key + "; ";
             }
-            else if (what == 7 && held >= 0)   // let go
+            else if (what == 7 && !all)
             {
-                t.apart(kSteps[static_cast<std::size_t>(held)]);
-                t.tap(kSteps[static_cast<std::size_t>(held)], finger());
-                std::snprintf(line, sizeof line, "let go %d; ", held + 1);
-                held = -1;
+                snapshot = t.everything();
+                t.set("all", 1.0);
+                t.run(0.05);
+                log += "ALL on; ";
             }
-            else if (what == 9 && modes)   // a mode key, or REC
+            else if (what == 8 && all)
             {
-                const int m = pick(3);
-                t.tap(m == 0 ? kVoiceMode : m == 1 ? kPerfMode : kRec, finger());
-                std::snprintf(line, sizeof line, m == 0 ? "VOICE; " : m == 1 ? "PERF; " : "REC; ");
-            }
-            else if (what == 8)   // the transport
-            {
-                t.playing = !t.playing;
-                if (t.playing)
-                    t.ppq = 0.0;
-                std::snprintf(line, sizeof line, t.playing ? "play; " : "stop; ");
-            }
-            else
-                line[0] = '\0';
-            log += line;
-            t.run(0.05 + 0.01 * pick(76));   // no finger taps twice within the debounce
-            if (std::getenv("STRESS_TRACE") && std::atoi(std::getenv("STRESS_TRACE")) == run && !t.playing)
-            {
-                std::string leds;
-                for (const int b : kSteps)
-                    leds += t.led(b) ? 'X' : '.';
-                std::string want_;
-                for (const bool w : want)
-                    want_ += w ? 'X' : '.';
-                std::printf("  %-14s leds %s want %s held %d\n", line, leds.c_str(), want_.c_str(), held + 1);
-            }
-        }
-        if (held >= 0)
-        {
-            t.tap(kSteps[static_cast<std::size_t>(held)], 0.1);
-            log += "let go; ";
-        }
-        t.playing = false;
-        t.run(0.5);
-
-        bool ok = true;
-        std::string report;
-        for (const int b : kSteps)
-            if (t.num(t.btn(b)) > 0.5)
-            {
-                ok = false;
-                report += "  step key " + t.btn(b) + " reads lit\n";
-            }
-        std::string expect;
-        for (const bool w : want)
-            expect += w ? 'X' : '.';
-        if (!modes)
-        {
-            const std::string d1 = t.steps(0);
-            if (d1 != expect)
-            {
-                ok = false;
-                report += "  DRUM 1 " + d1 + " (tapped " + expect + ")\n";
-            }
-            for (int v = 1; v < 7; ++v)
-            {
-                const std::string s = t.steps(v);
-                if (s != "................")
+                t.set("all", 0.0);
+                t.run(0.1);
+                log += "ALL off; ";
+                if (!snapshot.empty())
                 {
-                    ok = false;
-                    report += "  voice " + std::to_string(v + 1) + " " + s + "\n";
+                    const Everything now = t.everything();
+                    for (const auto& [where, was] : snapshot)
+                    {
+                        const auto it = now.find(where);
+                        if (it == now.end() || it->second != was)
+                        {
+                            ok = false;
+                            const auto [v, p, s] = where;
+                            report += "  voice " + std::to_string(v) + " page " + std::to_string(p) + (s ? "b" : "")
+                                      + ": " + row(was) + " -> " + (it == now.end() ? "gone" : row(it->second)) + "\n";
+                        }
+                    }
+                    snapshot.clear();
                 }
             }
+            t.run(0.05 + 0.01 * pick(40));
+        }
+        t.set("all", 0.0);
+        t.run(0.5);
+        for (const int v : kVoices)
+        {
+            t.showVoice(v);
+            for (const int s : kSteps)
+                if (t.num("led_" + std::to_string(s)) > 0.5)
+                {
+                    ok = false;
+                    report += "  voice " + std::to_string(v) + ": step key " + std::to_string(s) + " lit\n";
+                }
         }
         std::printf("run %2d: %s\n", run, ok ? "ok" : "FAILED");
         if (!ok)

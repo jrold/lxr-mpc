@@ -23,7 +23,7 @@
 extern "C" {
 #endif
 
-#define VOLT_MACHINE_API_VERSION 3
+#define VOLT_MACHINE_API_VERSION 4
 #define VOLT_SAMPLE_RATE 44100      /* the DACs run at 44140.6 Hz (PLLI2S); the host's rate is close enough */
 #define VOLT_CARD_SECTORS 131072u   /* a 64 MB card */
 #define VOLT_SECTOR_BYTES 512u
@@ -38,6 +38,7 @@ typedef struct VoltKnob
     int param;   /* the firmware's parameter number; -1: nothing there */
     int value;
     int min, max;
+    int name;    /* the display's name for it (a firmware text id) */
 } VoltKnob;
 
 typedef struct VoltMachineApi
@@ -68,8 +69,11 @@ typedef struct VoltMachineApi
     void (*fader)(int index, int value);    /* 0..4095 */
     int (*knob)(int index, VoltKnob *out);  /* what is under a knob now; 0 if nothing */
     void (*knob_to)(int index, int value);  /* turn a knob until its parameter reads value */
-    int (*lock_armed)(void);                /* a held step's lock is armed: knobs now lock to it */
-    int (*lockable)(void);                  /* holding a step key would arm a lock (voice mode) */
+    int (*voice)(void);                     /* the voice whose page is shown (0..6); -1 on any other page */
+    int (*voice_knob)(int voice, int index, VoltKnob *out);   /* what that knob would be on that voice's
+                                                                  same page and screen; 0 if nothing, or
+                                                                  not a sound parameter */
+    void (*set_param)(int param, int value);   /* a sound parameter set as its knob would set it */
     void (*midi)(const uint8_t *bytes, int count);   /* the DIN MIDI input, at 31250 baud */
     void (*midi_at)(const uint8_t *bytes, int count, int frame);   /* ... arriving `frame` frames into the next render() */
 

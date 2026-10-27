@@ -6,12 +6,14 @@
    in the layout (gen_layout.py); here it loses its touch (a display-only
    definition, just a filmstrip) and gets its strip: the display's 128
    characters (dotfont.py), or an LED dark then lit.
-2. Big on/off keys. SHIFT, PAD LEARN and MPC SYNC are `toggle`s (one flip per
-   tap); each becomes a key of its size, with its own definition and key
-   images, keeping the toggle's actions.
+2. Big on/off keys. ALL and PAD LEARN are `toggle`s (one flip per tap); each
+   becomes a key of its size, with its own definition and key images, keeping
+   the toggle's actions.
 3. The artwork, repainted as cyan-lit graphite hardware (hardware.py): both
    pages' panels, every key's images, and the endless knobs' filmstrips.
    Geometry and bindings stay as generated.
+4. The Q-Links: on every page, the MPC's four turn the four knobs, and its
+   other Q-Link banks nothing.
 
 Needs Pillow, the Titillium Web fonts build.sh copies to build/fonts/, and
 mpc-vst-plugins' tools (layout parser) in $MPC_VST or mpc/.mpc-vst-plugins.
@@ -152,31 +154,32 @@ def display_only(tui, params, save):
         placed["bounds"]["bounds"] = "%d %d %d %d" % (round(cx - size / 2), round(cy - size / 2), size, size)
         placed["bounds"]["acceptsHWFocus"] = "No"
         count[kind] += 1
-    if count != {"lcd_": 32, "led_": 41}:
-        sys.exit("skin_post: placed %d display cells and %d LEDs (want 32 and 41)" % (count["lcd_"], count["led_"]))
+    if count != {"lcd_": 32, "led_": len(gl.PANEL_KEYS)}:
+        sys.exit("skin_post: placed %d display cells and %d LEDs (want 32 and %d)"
+                 % (count["lcd_"], count["led_"], len(gl.PANEL_KEYS)))
 
 
-def step_locks(tui, params):
-    """A double tap on a step key grabs the step for a lock: each step key's
-    definition gets a Double Click action that flips its own "Lock" handle,
-    and each placement maps that handle to the step's lock_NN parameter."""
-    index = {p["key"]: i for i, p in enumerate(params)}
-    defs = {d["key"]: d for d in find_defs(tui)}
-    done = 0
-    for placed in placements(tui, "shTrig_btn_"):
-        key = param_of(placed, params)
-        lock = "lock_" + key[4:] if key and key.startswith("btn_") else None
-        if lock not in index:
+def qlinks_on_knobs(pdir, params):
+    """Every page's Q-Links: the four knobs, in the places the generator gave
+    the PANEL page's first bank; every other Q-Link (the further banks, that
+    reached the display cells and LEDs) unmapped."""
+    knobs = {p["key"]: i for i, p in enumerate(params) if p["key"] in ("knob1", "knob2", "knob3", "knob4")}
+    for name in ("Q-Links.json", "Q-Links - 8by1.json"):
+        path = os.path.join(pdir, name)
+        if not os.path.exists(path):
             continue
-        definition = defs[placed["componentData"]["type"]]["value"]
-        if not any(a.get("onAction") == "Double Click" for a in definition["actions"]):
-            definition["actions"].append({"version": 2, "onAction": "Double Click", "handler": "Toggle Switch",
-                                          "handleName": "Lock", "additionalData": "",
-                                          "handle remapping": {"version": 1, "map": []}})
-        placed["handle remapping"]["map"].append({"key": "Lock", "value": "Parameter %d" % index[lock]})
-        done += 1
-    if done != len(gl.STEP_BUTTONS):
-        sys.exit("skin_post: %d step keys got a double tap, want %d" % (done, len(gl.STEP_BUTTONS)))
+        q = json.load(open(path))
+        maps = q["Screen Mode Q-Links"]["map"]
+        first = maps[0]["Q-Links"]
+        place = {slot: idx for slot, idx in first.items() if idx in knobs.values()}
+        if sorted(place.values()) != sorted(knobs.values()):
+            sys.exit("skin_post: %s: the PANEL page's Q-Links don't reach the four knobs" % name)
+        for m in maps:
+            m["Q-Links"] = {slot: place.get(slot, -1) for slot in m["Q-Links"]}
+        program = q.get("Program Mode Q-Links")
+        if program:
+            q["Program Mode Q-Links"] = {slot: place.get(slot, -1) for slot in program}
+        json.dump(q, open(path, "w"), indent=1)
 
 
 # ---------------------------------------------------------------- pages
@@ -211,34 +214,21 @@ def panel_page():
         cx = gl.knob_cx(i) * SS
         d.line((cx, (gl.LCD_BEZEL[3] - Y_OFF + 4) * SS, cx, (gl.KNOB_CY - gl.KNOB_R - 10 - Y_OFF) * SS),
                fill=hw.AMBER_DIM + (255,), width=SS)
-    hw.knob_well(img, gl.ENC_CX, gl.ENC_CY - Y_OFF, 2 * gl.ENC_R)
     d = ImageDraw.Draw(img)
-    text(d, (gl.ENC_CX, gl.ENC_CY + gl.ENC_R + 22), "DATA", 15, hw.INK_DIM + (255,), spacing=3)
-    text(d, (gl.ENC_CX, 302), "VOLTKIT", 34, hw.INK + (255,), spacing=6)
-    text(d, (gl.ENC_CX, 330), "DRUM COMPUTER", 13, hw.AMBER + (255,), spacing=4)
+    text(d, (gl.ALL_CX, gl.TITLE_Y), "VOLTKIT", 34, hw.INK + (255,), spacing=6)
+    text(d, (gl.ALL_CX, gl.TITLE_Y + 30), "VOICE MODULE", 13, hw.AMBER + (255,), spacing=4)
 
     # the key rows, each on its strip (the LEDs sit in its top margin)
     for name, (row, cy, h) in gl.ROWS.items():
         top = cy - h // 2 - 2 * gl.LED_R - gl.LED_ABOVE - 2
-        bottom = cy + h // 2 + (30 if name == "steps" else 6)
-        hw.tray(img, page_box((gl.X0 - 10, top, gl.X1 + 10, bottom)), screws=False)
-    d = ImageDraw.Draw(img)
-    steps = gl.row_keys(gl.STEP_ROW, 0)
-    for (_, _, cx, _), label in zip(steps, gl.STEP_LABELS):
-        text(d, (cx, gl.STEP_LABEL_Y), label, 13, hw.INK_DIM + (255,), bold=False)
-    # SHIFT reads the step captions: a cyan rule under each group of four
-    for g in range(4):
-        x0 = steps[4 * g][2] - steps[4 * g][3] // 2
-        x1 = steps[4 * g + 3][2] + steps[4 * g + 3][3] // 2
-        y = (gl.STEP_LABEL_Y + 13 - Y_OFF) * SS
-        d.line((x0 * SS, y, x1 * SS, y), fill=hw.AMBER_DIM + (255,), width=SS)
+        hw.tray(img, page_box((gl.X0 - 10, top, gl.X1 + 10, cy + h // 2 + 6)), screws=False)
     return img.resize((W, H), Image.Resampling.LANCZOS)
 
 
 def mix_page():
     img = hw.plate(W, H)
     hw.panel(img, page_box((12, 92, 1000, 700)))
-    hw.panel(img, page_box((1012, 92, 1268, 700)), "Sync")
+    hw.panel(img, page_box((1012, 92, 1268, 700)), "Voices")
     d = ImageDraw.Draw(img)
     for i, name in enumerate(gl.FADERS + ["MASTER"]):
         cx = gl.MASTER_CX if name == "MASTER" else 110 + 128 * i
@@ -247,8 +237,8 @@ def mix_page():
         # the value's window, under the fader (where shadow_skin puts the value)
         top = gl.FADER_CY + gl.FADER_H // 2 + 3
         hw.well(img, page_box((cx - 52, top, cx + 52, top + 26)), radius=4)
-    lines = ["The sequencer follows", "the MPC: its tempo,", "PLAY and STOP.", "",
-             "Off: set a tempo on", "the PERF page (BPM).", "", "The pads play the", "voices on channel 1."]
+    lines = ["The pads play the", "seven voices; the", "MPC's sequencer", "plays the pads.", "",
+             "Each fader is a", "voice group's level", "into VOLTKIT's", "output."]
     for n, line in enumerate(lines):
         text(d, (1140, 270 + 26 * n), line, 16, hw.INK_DIM + (255,), bold=False)
     return img.resize((W, H), Image.Resampling.LANCZOS)
@@ -258,18 +248,16 @@ def setup_page():
     img = hw.plate(W, H)
     hw.panel(img, page_box((12, 92, 1268, 340)), "Pads")
     hw.well(img, page_box((50, gl.PADS_INFO_Y - 23, 1230, gl.PADS_INFO_Y + 23)))
-    hw.panel(img, page_box((12, 352, 1268, 700)), "Locks and recording")
+    hw.panel(img, page_box((12, 352, 1268, 700)), "Playing it")
     d = ImageDraw.Draw(img)
-    text(d, (gl.PADS_X0 + (len(gl.PAD_MODES) * (gl.SWITCH_W + 2) - 2) // 2, gl.PADS_CY - 58), "PADS PLAY", 15,
-         hw.INK_DIM + (255,), spacing=3)
     lines = [
-        "VOICES: the pads play the seven voices. PAD LEARN, then hit the pads for D1, D2, D3, SN, CY, CH, OH.",
-        "STEPS: the pads are the 16 step keys. PAD LEARN, then hit the pads for steps 1 to 16.",
+        "The pads play the seven voices: General MIDI drum notes, or PAD LEARN, then hit the pads",
+        "for D1, D2, D3, SN, CY, CH and OH. CLEAR PADS goes back to the drum notes.",
         "",
-        "To lock a step: double-tap its key on PANEL (it lights up and stays held; pages can change), or",
-        "hold its pad in STEPS. Turn knobs or Q-Links: two lock to the step. Tap the key again to let go.",
+        "PANEL: a voice key picks the voice, a page key its page; the same page key again shows",
+        "the page's second screen. The four knobs and the MPC's Q-Links set the parameters shown.",
         "",
-        "To record: REC on PANEL, then PLAY on the MPC; the pads (in VOICES) record into the pattern.",
+        "ALL: on, a knob moves its parameter on every voice that has it; off, they all go back.",
     ]
     for n, line in enumerate(lines):
         if line:
@@ -299,7 +287,7 @@ def main():
         sys.exit("skin_post: expected the PANEL, MIX and SETUP tabs")
     display_only(tui, params, save)
     big_keys(tui, params, save)
-    step_locks(tui, params)
+    qlinks_on_knobs(pdir, params)
     for d in find_defs(tui):   # the faders' values in cyan
         if d["key"].startswith("shSlider"):
             for c in d["value"]["componentsData"]:
@@ -319,15 +307,10 @@ def main():
                     sys.exit("skin_post: %d images for key %s" % (len(paths), w["key"]))
                 bw, bh = Image.open(paths[0]).size
                 on = paths[0][:-len("_off.png")] + "_on.png"
-                arrow = {"btn_40": -1, "btn_00": 1}.get(w["key"])
                 label = w.get("label", "")
-                size = 30 if label.isdigit() else 17 if w["key"].startswith("btn_") else 22
+                size = 24 if w["key"].startswith("btn_") else 22
                 for lit, path in ((False, paths[0]), (True, on)):
-                    if arrow:
-                        img = hw.key(bw, bh, "", True, led=False) if lit else hw.arrow_key(bw, bh, arrow)
-                    else:
-                        img = hw.key(bw, bh, label, lit, led=False, size=size)
-                    save(img, os.path.basename(path))
+                    save(hw.key(bw, bh, label, lit, led=False, size=size), os.path.basename(path))
             elif w["kind"] == "enum_h":   # a switch: a key per option, lit when chosen
                 options = w["options"] if isinstance(w["options"], list) else w["options"].split(",")
                 for o, (_, _, sw, sh) in enumerate(shadow_skin.seg_rects(dict(w, options=options))):
@@ -347,8 +330,8 @@ def main():
         frame, frames = strip.width, strip.height // strip.width
         if frames != 128 or frame * frames > 16384:
             sys.exit("skin_post: knob r=%d: a %d-frame, %d px strip won't slice right on MPC" % (r, frames, frame * frames))
-        # the encoder turns endlessly; the four knobs show their parameter's value
-        save(hw.endless_strip(frame, frames) if r == gl.ENC_R else hw.knob_strip(frame, frames), name)
+        # the four knobs show their parameter's value
+        save(hw.knob_strip(frame, frames), name)
 
     # The generator's definitions and strips for the display cells' and LEDs'
     # knobs are unused now.

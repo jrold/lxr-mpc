@@ -1,6 +1,6 @@
 // AdapterTest.cpp: VOLTKIT's plug-in adapter (mpc/VoltkitMpc.cpp) driven as
 // the MPC's wrapper drives it: parameters set and read by key, the changed
-// keys collected, song_pos then render each 128-frame block.
+// keys collected, a render each 128-frame block.
 //
 //   VOLTKIT_ENGINE=<engine library> VOLTKIT_CARD=data/card.vkc voltkit-adapter-test
 //
@@ -17,10 +17,9 @@ int mpc_engine_changed(void* inst, char* key, int len);
 #include <filesystem>
 #include <fstream>
 #include <iterator>
-#include <random>
+#include <map>
 #include <set>
 #include <string>
-#include <utility>
 #include <vector>
 
 namespace
@@ -45,15 +44,7 @@ std::string dataDir;
 struct Track
 {
     void* inst = nullptr;
-    double ppq = 0.0;
-    bool playing = false;
-    double bpm = 120.0;
     std::set<std::string> seen;   // changed keys reported
-    std::vector<float> audio;     // the left channel, when recording
-    bool recording = false;
-    double jitter = 0.0;          // beats the reported position wobbles by, either way
-    double loop = 0.0;            // beats the MPC's sequence loops after, if set
-    std::mt19937 wobble { 7 };
 
     Track() { inst = E->create(dataDir.c_str()); }
     ~Track() { E->destroy(inst); }
@@ -77,18 +68,9 @@ struct Track
         std::int16_t out[kBlock * 2];
         for (int b = 0; b < blocks; ++b)
         {
-            const double off = jitter * (std::uniform_real_distribution<double>(-1.0, 1.0)(wobble));
-            E->song_pos(inst, std::fmax(ppq + off, 0.0), bpm, playing ? 1 : 0, kBlock);
             E->render(inst, out, kBlock);
-            if (playing)
-                ppq += kBlock / (60.0 / bpm * kRate);
-            if (loop > 0.0 && ppq >= loop)
-                ppq -= loop;
             for (const std::int16_t s : out)
                 peak = std::fmax(peak, std::abs(s) / 32768.0);
-            if (recording)
-                for (int i = 0; i < kBlock; ++i)
-                    audio.push_back(out[2 * i] / 32768.0f);
             char key[64];
             while (mpc_engine_changed(inst, key, sizeof key))
                 seen.insert(key);
@@ -126,66 +108,24 @@ struct Track
     void note(const int n, const int vel) { midi(0x90, n, vel); }
     void noteOff(const int n) { midi(0x80, n, 0); }
 
-    // Plays one bar from the top with the transport, recording the audio.
-    void playBar()
-    {
-        playing = true;
-        ppq = 0.0;
-        recording = true;
-        audio.clear();
-        run(2.0);
-        recording = false;
-        playing = false;
-        run(0.3);
-    }
+    // What knob i shows (its value, as the display above it has it).
+    int knob(const int i) { return std::atoi(get("knob" + std::to_string(i) + "_display").c_str()); }
 
-    // Zero crossings 30..110 ms after `at` seconds into the recording: the
-    // pitch, once a drum's sweep has settled.
-    int crossings(const double at)
+    // A voice and page shown, the page's first screen (another page first: a
+    // page key again shows its second screen), and its knobs' values.
+    std::map<int, int> knobsOf(const int voice, const int page)
     {
-        int n = 0;
-        const std::size_t a = static_cast<std::size_t>((at + 0.03) * kRate), b = a + kRate * 8 / 100;
-        for (std::size_t i = a + 1; i < b && i < audio.size(); ++i)
-            n += (audio[i - 1] < 0) != (audio[i] < 0);
-        return n;
-    }
-
-    // Each hit's time against its step (16ths at bpm), in ms: an onset is a
-    // sharp rise of the 2.5 ms loudness.
-    std::vector<double> hitTimes()
-    {
-        std::vector<double> out;
-        const double stepFrames = 60.0 / bpm / 4.0 * kRate;
-        double prev = 0.0;
-        long last = -100000;
-        for (std::size_t w = 0; w + 110 <= audio.size(); w += 110)
-        {
-            double e = 0.0;
-            for (std::size_t i = w; i < w + 110; ++i)
-                e += audio[i] * audio[i];
-            e = std::sqrt(e / 110.0);
-            if (e > 0.03 && e > 4.0 * prev + 0.01 && static_cast<long>(w) - last > 2200)
-            {
-                // the window's first sample above a tenth of its loudness
-                std::size_t i = w;
-                while (i < w + 110 && std::fabs(audio[i]) < 0.1 * e)
-                    ++i;
-                const double steps = i / stepFrames;
-                out.push_back((steps - std::round(steps)) * stepFrames * 1000.0 / kRate);
-                last = static_cast<long>(w);
-            }
-            prev = e;
-        }
-        return out;
-    }
-
-    double level(const double at)
-    {
-        double peak = 0.0;
-        const std::size_t a = static_cast<std::size_t>(at * kRate), b = a + kRate / 10;
-        for (std::size_t i = a; i < b && i < audio.size(); ++i)
-            peak = std::fmax(peak, std::fabs(audio[i]));
-        return peak;
+        char k[8];
+        std::snprintf(k, sizeof k, "btn_%02d", voice);
+        set(k, 1.0);
+        set(page == 17 ? "btn_16" : "btn_17", 1.0);
+        run(0.05);
+        std::snprintf(k, sizeof k, "btn_%02d", page);
+        set(k, 1.0);
+        run(0.2);   // the display repaints a character at a time
+        if (std::getenv("ADAPTER_SHOW"))
+            std::printf("  voice %d page %d |%s|\n", voice, page, lcd().c_str());
+        return { { 1, knob(1) }, { 2, knob(2) }, { 3, knob(3) }, { 4, knob(4) } };
     }
 };
 }
@@ -209,7 +149,7 @@ int main()
     CHECK(t.get("status").empty());
     t.run(1.0);
     std::printf("start        |%s|\n", t.lcd().c_str());
-    CHECK(t.seen.count("lcd_00") && t.seen.count("led_00"));
+    CHECK(t.seen.count("lcd_00") && t.seen.count("led_01"));
 
     // the pads: General MIDI drum notes play the voices
     t.note(36, 127);
@@ -243,195 +183,75 @@ int main()
     t.run(0.05);
     CHECK(t.get("knob1_display") == "0");
 
-    // the encoder moves the selection
-    const std::string beforeEnc = t.lcd();
-    t.set("enc", 0.5 + 1.0 / 128.0);
+    // a page key again shows its page's second screen, and again its first:
+    // the snare's OSC
+    t.set("btn_04", 1.0);
+    t.set("btn_17", 1.0);
     t.run(0.05);
-    std::printf("encoder +1   |%s|\n", t.lcd().c_str());
-    CHECK(t.lcd() != beforeEnc);
-
-    // SHIFT latches
-    t.set("shift", 1.0);
-    t.run(0.05);
-    CHECK(t.num("shift") == 1.0);
-    t.set("shift", 0.0);
-    t.run(0.05);
-
-    // steps 1, 5, 9 and 13 on voice 1, then the MPC's transport plays them
-    t.set("btn_24", 1.0);   // VOICE
-    t.set("btn_01", 1.0);   // DRUM 1
-    t.set("btn_16", 1.0);   // OSC page
-    t.run(0.05);
-    for (const char* step : { "btn_39", "btn_31", "btn_23", "btn_15" })
-    {
-        t.set(step, 1.0);
-        t.run(0.02);
-    }
-    CHECK(t.led(39) && t.led(31) && t.led(23) && t.led(15));
-    const double idle = t.run(0.5);
-    t.playBar();
-    const double stopped = t.run(0.5);
-    std::printf("transport: %.3f stopped, step 1 %.3f, %.3f after stop\n", idle, t.level(0.0), stopped);
-    CHECK(idle < 0.01 && t.level(0.0) > 0.05 && stopped < 0.01);
-    CHECK(std::abs(t.crossings(0.0) - t.crossings(0.5)) <= 2);
-    for (const auto [jitter, loop] : { std::pair { 0.0, 0.0 }, { 0.004, 0.0 }, { 0.004, 8.0 } })
-    {
-        // in time: eight bars, every hit against its step; again with the MPC's
-        // position wobbling by up to 1 ms (0.004 beats) either way, and looping
-        // two bars
-        t.jitter = jitter;
-        t.loop = loop;
-        t.playing = true;
-        t.ppq = 0.0;
-        t.recording = true;
-        t.audio.clear();
-        t.run(16.0);
-        t.recording = false;
-        t.playing = false;
-        t.run(0.3);
-        const std::vector<double> d = t.hitTimes();
-        double lo = 1e9, hi = -1e9, sum = 0.0;
-        for (std::size_t i = 1; i + 1 < d.size(); ++i)   // not the first (late by the lead after a start) or the last
-        {
-            lo = std::fmin(lo, d[i]);
-            hi = std::fmax(hi, d[i]);
-            sum += d[i];
-        }
-        const double mean = d.size() > 2 ? sum / (d.size() - 2) : 0.0;
-        t.jitter = t.loop = 0.0;
-        std::printf("timing%s%s: %zu hits, %.2f ms on average from the step, %.2f to %.2f\n",
-                    jitter > 0 ? " (wobbling)" : "", loop > 0 ? " (looping)" : "", d.size(), mean, lo, hi);
-        CHECK(d.size() >= 32);
-        CHECK(std::fabs(mean) < 1.0 && hi - lo < 1.6);
-    }
-
-    // locks with a double tap on step 13's key (its two taps, then the skin's
-    // Double Click): it reads lit and stays held; a knob turned at once waits
-    // for the lock to arm; FILTER (whose release ends a lock in the firmware)
-    // and a knob there lock too; a tap, here one that sets 0, lets go
-    const std::string osc = t.lcd();
-    t.set("btn_09", 1.0);   // FILTER page, to see the kit's own filter
-    t.run(0.05);
-    const std::string filter = t.lcd();
-    t.set("btn_16", 1.0);   // back to OSC
-    t.run(0.05);
-    t.set("btn_15", 1.0);
-    t.set("btn_15", 1.0);
-    t.set("lock_15", 1.0);
-    t.set("knob1", t.num("knob1") + 36.0 / 127.0);   // at once: waits for the lock
-    t.run(1.0);
-    CHECK(t.num("btn_15") == 1.0);
-    const std::string lockedOsc = t.lcd();
-    t.set("btn_09", 1.0);   // FILTER
-    t.set("knob1", t.num("knob1") - 60.0 / 127.0);   // at once again
-    t.run(3.0);
-    const std::string lockedFilter = t.lcd();
-    std::printf("held        OSC |%s|  FILTER |%s|\n", lockedOsc.c_str(), lockedFilter.c_str());
-    CHECK(lockedOsc != osc && lockedFilter != filter && t.num("btn_15") == 1.0);
-    t.set("btn_15", 0.0);   // the tap that lets go
-    t.run(0.1);
-    std::printf("let go   FILTER |%s|\n", t.lcd().c_str());
-    CHECK(t.lcd() == filter && t.num("btn_15") == 0.0);   // the kit's own filter is back
-    t.set("btn_16", 1.0);
-    t.run(0.05);
-    CHECK(t.lcd() == osc);
-    CHECK(t.led(15));   // step 13 still on
-    // both locks are on the step: held again, it shows them
-    t.set("btn_15", 1.0);
-    t.set("btn_15", 1.0);
-    t.set("lock_15", 1.0);
-    t.run(0.8);
-    CHECK(t.lcd() == lockedOsc);
-    t.set("btn_09", 1.0);
-    t.run(0.8);
-    CHECK(t.lcd() == lockedFilter);
-    t.set("btn_15", 1.0);
-    t.run(0.1);
-    t.set("btn_16", 1.0);
-    t.run(0.05);
-    t.playBar();
-    std::printf("double-tap locks: step 1 %d crossings, step 13 %d\n", t.crossings(0.0), t.crossings(1.5));
-    CHECK(t.crossings(1.5) > t.crossings(0.0) + 3);
-    // a double tap whose second tap came too soon to count: step 3 (off) stays off
-    CHECK(!t.led(37));
-    t.set("btn_37", 1.0);
-    t.set("lock_37", 1.0);
-    t.run(0.7);
-    CHECK(t.num("btn_37") == 1.0);
-    t.set("btn_37", 1.0);
-    t.run(0.1);
-    CHECK(!t.led(37) && t.num("btn_37") == 0.0);
-    // in PERF a held step key rolls its voice (recording it with REC on): a double
-    // tap on step 6 there is two taps, CL HH's roll, never a hold
-    t.set("btn_25", 1.0);   // PERF
-    t.set("btn_34", 1.0);   // REC
-    t.playing = true;
-    t.ppq = 0.0;
-    t.run(0.3);
-    t.set("btn_30", 1.0);
-    t.run(0.1);
-    t.set("btn_30", 1.0);
-    t.set("lock_30", 1.0);
-    t.run(2.0);
-    CHECK(t.num("btn_30") == 0.0);
-    t.playing = false;
-    t.set("btn_34", 1.0);
-    t.set("btn_24", 1.0);   // VOICE
-    t.run(0.3);
-    t.set("btn_06", 1.0);   // CL HH: what the two taps recorded, at most
-    t.run(0.05);
-    int clhh = 0;
-    for (const int l : { 39, 38, 37, 36, 31, 30, 29, 28, 23, 22, 21, 20, 15, 14, 13, 12 })
-        clhh += t.led(l) ? 1 : 0;
-    std::printf("perf double tap: CL HH %d steps\n", clhh);
-    CHECK(clhh <= 2);
-    t.set("btn_01", 1.0);
-    t.run(0.05);
-
-    // a lock with the pads as step keys: pad 9 held, the knob turned, let go
-    t.set("pad_mode", 1.0);
-    t.run(0.05);
-    std::printf("pads: %s\n", t.get("pads_info").c_str());
-    CHECK(t.num("pad_mode") == 1.0);
-    t.note(36 + 8, 100);   // step 9, held
-    t.run(0.7);
-    t.set("knob1", t.num("knob1") + 24.0 / 127.0);
-    t.run(0.1);
-    t.noteOff(36 + 8);
+    t.set("btn_16", 1.0);   // OSC
     t.run(0.2);
-    CHECK(t.lcd() == osc);
-    CHECK(t.led(23));
-    t.playBar();
-    std::printf("pad lock: step 1 %d crossings, step 9 %d\n", t.crossings(0.0), t.crossings(1.0));
-    CHECK(t.crossings(1.0) > t.crossings(0.0) + 3);
-    // a quick pad tap toggles a step, as the key does
-    t.note(36 + 1, 100);
-    t.run(0.05);
-    t.noteOff(36 + 1);
-    t.run(0.05);
-    CHECK(t.led(38));   // step 2 on
-    t.set("pad_mode", 0.0);
-    t.run(0.05);
+    const std::string osc1 = t.lcd();
+    t.set("btn_16", 1.0);
+    t.run(0.2);
+    const std::string osc2 = t.lcd();
+    t.set("btn_16", 1.0);
+    t.run(0.2);
+    std::printf("OSC          |%s|  again |%s|\n", osc1.c_str(), osc2.c_str());
+    CHECK(osc2 != osc1 && t.lcd() == osc1);
+    t.set("btn_01", 1.0);
+    t.run(0.2);
 
-    // recording from the pads: REC, the transport plays, snares on beats 2 and 4
-    t.set("btn_04", 1.0);   // SNARE: its steps on the step LEDs
-    t.run(0.05);
-    CHECK(!t.led(31) && !t.led(15));
-    t.set("btn_34", 1.0);   // REC
-    t.playing = true;
-    t.ppq = 0.0;
-    for (int b = 0; b < 4; ++b)
+    // no sequencer: the LXR's PLAY, REC and step keys aren't keys here, and
+    // nothing plays by itself
+    for (const char* k : { "btn_33", "btn_34", "btn_39", "btn_31" })
     {
-        if (b == 1 || b == 3)
-            t.note(38, 120);
-        t.run(0.5);
+        t.set(k, 1.0);
+        t.run(0.05);
     }
-    t.playing = false;
+    const double quiet = t.run(2.0);
+    std::printf("no sequencer: %.4f\n", quiet);
+    CHECK(quiet < 0.01 && !t.led(33));
+
+    // ALL: on DRUM 1's OSC page, knob 1 (coarse tune) +12 moves it on every
+    // voice by as much, knob 3 (DRUM 1's waveform, a choice) sets the drums'
+    // alike and leaves the snare's noise (another parameter there) alone; off,
+    // all of it goes back
+    std::map<int, std::map<int, int>> before;
+    for (int v = 1; v <= 7; ++v)
+        before[v] = t.knobsOf(v, 16);
+    t.knobsOf(1, 16);
+    t.set("all", 1.0);
+    t.run(0.05);
+    CHECK(t.num("all") == 1.0);
+    t.set("knob1", t.num("knob1") + 12.0 / 127.0);
+    t.run(0.05);
+    t.set("knob3", t.num("knob3") + 2.0 / 3.0);
     t.run(0.1);
-    t.set("btn_34", 1.0);   // REC off
+    const int wave = t.knob(3);
+    std::map<int, std::map<int, int>> during;
+    for (int v = 1; v <= 7; ++v)
+        during[v] = t.knobsOf(v, 16);
+    for (int v = 1; v <= 7; ++v)
+        std::printf("ALL voice %d: coarse %d -> %d, knob 3 %d -> %d\n", v, before[v][1], during[v][1], before[v][3],
+                    during[v][3]);
+    CHECK(during[1][1] == before[1][1] + 12 && during[2][1] == before[2][1] + 12 && during[4][1] == before[4][1] + 12);
+    CHECK(during[1][3] != before[1][3] && during[2][3] == during[1][3] && during[3][3] == wave);
+    CHECK(during[4][3] == before[4][3]);   // the snare's noise: another parameter
+    t.knobsOf(1, 16);
+    t.set("all", 0.0);
     t.run(0.1);
-    std::printf("recorded: step 5 %d, step 13 %d\n", t.led(31), t.led(15));
-    CHECK(t.led(31) && t.led(15));
+    std::map<int, std::map<int, int>> after;
+    for (int v = 1; v <= 7; ++v)
+        after[v] = t.knobsOf(v, 16);
+    CHECK(after == before);
+    std::printf("ALL off: %s\n", after == before ? "every voice back" : "NOT BACK");
+    // without ALL, a knob is one voice's
+    t.knobsOf(1, 16);
+    t.set("knob1", t.num("knob1") + 5.0 / 127.0);
+    t.run(0.05);
+    const int drum1Coarse = t.knob(1);
+    CHECK(t.knobsOf(2, 16)[1] == before[2][1]);
+    t.knobsOf(1, 16);
 
     // PAD LEARN: the next seven pads play D1 to OH
     t.set("learn", 1.0);
@@ -443,7 +263,7 @@ int main()
     std::printf("learned: %s\n", t.get("pads_info").c_str());
     CHECK(t.num("learn") == 0.0);
     t.run(0.5);
-    t.note(63, 127);   // SN (the drums may still carry the last lock they played)
+    t.note(63, 127);   // SN
     CHECK(t.run(0.3) > 0.05);
     t.note(36, 127);   // no longer a pad
     CHECK(t.run(0.3) < 0.01);
@@ -470,7 +290,7 @@ int main()
                     all.size() > 40 ? all.substr(all.rfind('\n', all.size() - 2) + 1).c_str() : all.c_str());
         CHECK(all.find(" 90 3F 7F") != std::string::npos);   // the snare's learned pad, played above
     }
-    CHECK(state.rfind("v=3;", 0) == 0 && state.find(";card=VktD") != std::string::npos);
+    CHECK(state.rfind("v=4;", 0) == 0 && state.find(";card=VktD") != std::string::npos);
     CHECK(state.find(";voices=60,61,62,63,64,65,66") != std::string::npos);
     {
         Track u;
@@ -480,16 +300,13 @@ int main()
         CHECK(u.num("master") == -6.0 && u.num("fader1") == 0.5);
         u.note(60, 127);
         CHECK(u.run(0.5) > 0.02);
-        u.set("btn_24", 1.0);
-        u.set("btn_04", 1.0);   // SNARE: the recorded steps came back with the card
-        u.run(0.1);
-        CHECK(u.led(31) && u.led(15));
+        CHECK(u.knobsOf(1, 16)[1] == drum1Coarse);   // the kit came back with the card
     }
 
     // a damaged state falls back on the default card
     {
         Track v;
-        v.set("state", "v=3;card=@@@");
+        v.set("state", "v=4;card=@@@");
         v.run(1.0);
         CHECK(v.get("status").empty());
         v.note(60, 127);   // the learned pads (data/padmap.txt)

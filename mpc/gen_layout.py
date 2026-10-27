@@ -1,13 +1,13 @@
 """VOLTKIT's parameters (params.json) and touchscreen layout (layout.conf):
-the LXR-02's front panel.
+the LXR-02's voices as a voice module.
 
     python3 mpc/gen_layout.py
 
-PANEL is the machine: the 2x16 display with the four endless knobs under its
-four columns, the encoder with its push and SHIFT; then the keys, as on
-the hardware: the voice row, the page-select and mode row, and the 16 steps.
-Each key has its LED above it. MIX has the six faders, the output level and
-the MPC sync switch.
+PANEL: the 2x16 display with the four endless knobs under its four columns
+(the MPC's Q-Links turn them, on every page), ALL, and two rows of keys: the
+seven voices, and the pages (OSC AEG MOD FM CLICK FILTER LFO MIX; a page's
+key again shows its second screen). Each key has its LED above it. MIX has
+the six faders and the output level; SETUP the pads.
 
 The keys' button numbers are the firmware's (buttonHandler.h); the adapter
 (VoltkitMpc.cpp) presses and lets go. The display cells and LEDs are
@@ -27,27 +27,15 @@ THEME = {
     "theme_seg_active_tx": "0b0b0c", "theme_lcd": "05080a", "theme_knob_dot": "31d0ff", "theme_btn_on": "1a8fc0",
 }
 
-# ---- the panel's keys: (button number, caption) by row; None leaves a gap
-VOICE_ROW = [(40, "◀"), (0, "▶"), None,
-             (1, "DRUM 1"), (2, "DRUM 2"), (3, "DRUM 3"), (4, "SNARE"), (5, "CYM/CLP"), (6, "CL HH"), (7, "OP HH"),
-             None, (34, "REC"), (33, "PLAY"), (35, "COPY")]
-SELECT_ROW = [(16, "OSC"), (17, "AEG"), (18, "MOD"), (19, "FM"), (8, "CLICK"), (9, "FILTER"), (10, "LFO"), (11, "MIX"),
-              None, (24, "VOICE"), (25, "PERF"), (26, "LOAD"), (27, "SAVE")]
-# SEQ1..SEQ16, with what SHIFT makes of each (painted under the keys)
-STEP_BUTTONS = [39, 38, 37, 36, 31, 30, 29, 28, 23, 22, 21, 20, 15, 14, 13, 12]
-STEP_LABELS = ["DRUM1", "DRUM2", "DRUM3", "SNARE", "CLP/CYM", "CL HH", "OP HH", "KIT",
-               "MORPH", "SONG", "PROJECT", "CONFIG", "RELOAD", "LAST STP", "FX", "PATTERN"]
-STEP_ROW = []
-for i, b in enumerate(STEP_BUTTONS):
-    if i and i % 4 == 0:
-        STEP_ROW.append(None)
-    STEP_ROW.append((b, str(i + 1)))
+# ---- the panel's keys: (button number, caption) by row
+VOICE_ROW = [(1, "DRUM 1"), (2, "DRUM 2"), (3, "DRUM 3"), (4, "SNARE"), (5, "CYM/CLP"), (6, "CL HH"), (7, "OP HH")]
+SELECT_ROW = [(16, "OSC"), (17, "AEG"), (18, "MOD"), (19, "FM"), (8, "CLICK"), (9, "FILTER"), (10, "LFO"), (11, "MIX")]
+PANEL_KEYS = [b for b, _ in VOICE_ROW + SELECT_ROW]
 
 FADERS = ["DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYM/CLP", "HIHAT"]
 
 # ---- geometry (plugin area: x 0..1280, y 86..714)
 X0, X1 = 24, 1256       # the key rows' extent
-GAP = 26                # the space a None leaves
 LED_R = 6               # a key's LED (a display-only knob), LED_ABOVE px over the key's top
 LED_ABOVE = 11
 
@@ -55,18 +43,15 @@ LCD_CELL = 44           # a display cell: a square 128-frame strip, its characte
 LCD_X, LCD_ROWS = 64, (146, 194)   # left edge of the first cell; the rows' centres
 LCD_BEZEL = (36, 100, 64 + 16 * LCD_CELL + 28, 240)
 KNOB_CY, KNOB_R = 300, 40
-ENC_CX, ENC_CY, ENC_R = 925, 190, 56
-SIDE_CX, SIDE_W, SIDE_H = 1150, 170, 62
-SIDE_KEYS = [("enc_push", "PUSH", 160), ("shift", "SHIFT", 262)]
+ALL_CX, ALL_CY, ALL_W, ALL_H = 1040, 262, 330, 132   # ALL, right of the display
+TITLE_Y = 136
 
-ROWS = {"voice": (VOICE_ROW, 412, 60), "select": (SELECT_ROW, 508, 60), "steps": (STEP_ROW, 620, 84)}
-STEP_LABEL_Y = 676      # the SHIFT captions under the steps
-STEP_GAP, STEP_SPACE = 14, 6   # the steps: tighter groups and keys, so they come out wider
+ROWS = {"voice": (VOICE_ROW, 446, 112), "select": (SELECT_ROW, 622, 112)}
+KEY_SPACE = 12          # between two keys of a row
 
 # SETUP
-PAD_MODES = ["VOICES", "STEPS"]
-SWITCH_W, SETUP_KEY_H = 180, 80
-PADS_CY, PADS_X0, LEARN_CX, CLEAR_CX = 200, 60, 790, 1110
+SETUP_KEY_H = 80
+PADS_CY, LEARN_CX, CLEAR_CX = 200, 400, 880
 PADS_INFO_Y = 300
 
 FADER_CY, FADER_W, FADER_H = 392, 70, 460
@@ -76,19 +61,8 @@ MASTER_CX = 920
 
 def row_keys(row, height):
     """[(button, caption, cx, w)] for a row spread across X0..X1."""
-    keys = [k for k in row if k]
-    gaps = len(row) - len(keys)
-    gap, space = (STEP_GAP, STEP_SPACE) if row is STEP_ROW else (GAP, 10)
-    pitch = (X1 - X0 - gaps * gap) / len(keys)
-    width = round(pitch - space)
-    out, x = [], X0
-    for k in row:
-        if k is None:
-            x += gap
-            continue
-        out.append((k[0], k[1], round(x + pitch / 2), width))
-        x += pitch
-    return out
+    pitch = (X1 - X0) / len(row)
+    return [(b, cap, round(X0 + pitch * (n + 0.5)), round(pitch - KEY_SPACE)) for n, (b, cap) in enumerate(row)]
 
 
 def knob_cx(i):
@@ -114,29 +88,17 @@ def params():
         # the parameter's own value, as text (VoltkitMpc.cpp: knobN_display)
         out.append({"key": "knob%d" % (i + 1), "name": "Knob %d" % (i + 1), "min": 0, "max": 1, "default": 0,
                     "dynamic_display": True})
-    out.append({"key": "enc", "name": "Encoder", "min": 0, "max": 1, "default": 0.5})
-    out.append({"key": "enc_push", "name": "Encoder Push", "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
-    out.append({"key": "shift", "name": "Shift", "options": ["Off", "On"], "default": 0})
-    # the HOLD key's place, kept so the parameters after it keep their numbers
-    # (projects bind Q-Links and automation by number); no page shows it
-    out.append({"key": "hold", "name": "Unused", "options": ["Off", "On"], "default": 0})
-    for b in range(41):
-        c = caption_of(b) or ("Step %d" % (STEP_BUTTONS.index(b) + 1) if b in STEP_BUTTONS else "Key %d" % b)
-        name = c if not c.isdigit() else "Step " + c
-        name = {"◀": "Page Down", "▶": "Page Up"}.get(name, name.title() if name.isupper() else name)
-        if b == 32:
-            continue   # SHIFT is its own toggle
-        if b in STEP_BUTTONS:   # on (lit) while double-tapped for a lock: not momentary
-            out.append({"key": btn(b), "name": name, "min": 0, "max": 1, "default": 0})
-        else:
-            out.append({"key": btn(b), "name": name, "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
+    out.append({"key": "all", "name": "All Voices", "options": ["Off", "On"], "default": 0})
+    for b in PANEL_KEYS:
+        name = caption_of(b)
+        out.append({"key": btn(b), "name": name.title() if name.isupper() else name, "min": 0, "max": 1,
+                    "momentary": True, "hold_ms": 120})
     for i, f in enumerate(FADERS):
         out.append({"key": "fader%d" % (i + 1), "name": "%s Fader" % f.title(), "min": 0, "max": 1, "default": 1,
                     "dynamic_display": True})
     out.append({"key": "master", "name": "Master", "min": -24, "max": 6, "default": 0, "dynamic_display": True})
-    out.append({"key": "sync", "name": "MPC Sync", "options": ["Off", "On"], "default": 1})
     # set by the engine (it reports them; nothing else does)
-    for b in range(41):
+    for b in PANEL_KEYS:
         out.append({"key": "led_%02d" % b, "name": "LED %d" % b, "min": 0, "max": 1, "default": 0, "display": "int"})
     for c in range(32):
         # 0..126: MPC shows frame round(value * 126) of the 128-frame strip, so
@@ -145,20 +107,13 @@ def params():
         out.append({"key": "lcd_%02d" % c, "name": "LCD %d" % (c + 1), "min": 0, "max": 126, "default": 32,
                     "display": "int"})
     # the pads (SETUP)
-    out.append({"key": "pad_mode", "name": "Pads", "options": PAD_MODES, "default": 0})
     out.append({"key": "learn", "name": "Pad Learn", "options": ["Off", "On"], "default": 0})
     out.append({"key": "pads_clear", "name": "Clear Pads", "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
     out.append({"key": "pads_info", "name": "Pads", "min": 0, "max": 1, "display": "string", "type": "readout"})
-    # a double tap on a step key (skin_post.py: its Double Click action) grabs
-    # the step for a lock; not on any page of their own
-    for b in STEP_BUTTONS:
-        out.append({"key": "lock_%02d" % b, "name": "Lock Step %d" % (STEP_BUTTONS.index(b) + 1), "min": 0, "max": 1,
-                    "momentary": True, "hold_ms": 120})
     sections = [
-        {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "enc", "enc_push", "shift"]
-         + [btn(b) for b in range(41) if b != 32]},
-        {"label": "Mix", "keys": ["fader%d" % (i + 1) for i in range(6)] + ["master", "sync"]},
-        {"label": "Setup", "keys": ["pad_mode", "learn", "pads_clear", "pads_info"]},
+        {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "all"] + [btn(b) for b in PANEL_KEYS]},
+        {"label": "Mix", "keys": ["fader%d" % (i + 1) for i in range(6)] + ["master"]},
+        {"label": "Setup", "keys": ["learn", "pads_clear", "pads_info"]},
     ]
     return {"name": NAME, "params": out, "sections": sections}
 
@@ -174,50 +129,35 @@ def layout():
     w("qlinks_track = knob1,knob2,knob3,knob4")
     w("")
     w("[tab PANEL]")
-    w("# The four endless knobs, under the display's columns; the encoder. First:")
-    w("# a page's Q-Links go to its first controls in this file (MPC's four turn")
-    w("# knob1..knob4).")
+    w("# The four endless knobs, under the display's columns. First: a page's")
+    w("# Q-Links go to its first controls in this file (and skin_post.py keeps")
+    w("# every page's Q-Links on these four).")
     for i in range(4):
         w("knob    cx=%d cy=%d r=%d label=\"\" key=knob%d bw=%d ns=0 vs=0" % (knob_cx(i), KNOB_CY, KNOB_R, i + 1, 2 * KNOB_R + 20))
-    w("knob    cx=%d cy=%d r=%d label=\"\" key=enc bw=%d ns=0 vs=0" % (ENC_CX, ENC_CY, ENC_R, 2 * ENC_R + 20))
     w("# The display: a display-only knob per character cell (skin_post.py).")
     for r, cy in enumerate(LCD_ROWS):
         for c in range(16):
             w("knob    cx=%d cy=%d r=%d label=\"\" key=lcd_%02d bw=%d ns=0 vs=0"
               % (LCD_X + c * LCD_CELL + LCD_CELL // 2, cy, LCD_CELL // 2 - 5, r * 16 + c, LCD_CELL))
-    for key, cap, cy in SIDE_KEYS:
-        kind = "button" if key == "enc_push" else "toggle"
-        if kind == "button":
-            w("button  cx=%d cy=%d w=%d h=%d label=\"%s\" key=%s" % (SIDE_CX, cy, SIDE_W, SIDE_H, cap, key))
-        else:
-            w("toggle  cx=%d cy=%d label=\"%s\" key=%s bw=%d" % (SIDE_CX, cy, cap, key, SIDE_W))
+    w("toggle  cx=%d cy=%d label=\"ALL\" key=all bw=%d" % (ALL_CX, ALL_CY, ALL_W))
     w("# The keys, row by row, each with its LED above.")
     for name, (row, cy, h) in ROWS.items():
         for b, cap, cx, kw in row_keys(row, h):
             w("button  cx=%d cy=%d w=%d h=%d label=\"%s\" key=%s" % (cx, cy, kw, h, cap, btn(b)))
             w("knob    cx=%d cy=%d r=%d label=\"\" key=led_%02d bw=%d ns=0 vs=0"
               % (cx, cy - h // 2 - LED_ABOVE, LED_R, b, 2 * LED_R + 10))
-    # SHIFT's LED, by its key
-    w("knob    cx=%d cy=%d r=%d label=\"\" key=led_32 bw=%d ns=0 vs=0"
-      % (SIDE_CX - SIDE_W // 2 - 16, SIDE_KEYS[1][2], LED_R, 2 * LED_R + 10))
     w("")
     w("[tab MIX]")
-    w("# A fader per voice group, the output level and the MPC sync switch.")
+    w("# A fader per voice group and the output level.")
     pitch = 128
     for i in range(6):
         w("slider_v cx=%d cy=%d w=%d h=%d label=\"\" key=fader%d bw=120 ns=0 vs=24"
           % (110 + pitch * i, FADER_CY, FADER_W, FADER_H, i + 1))
     w("slider_v cx=%d cy=%d w=%d h=%d label=\"\" key=master bw=140 ns=0 vs=24" % (MASTER_CX, FADER_CY, FADER_W, FADER_H))
-    w("toggle  cx=%d cy=%d label=\"MPC SYNC\" key=sync bw=%d" % (1140, 200, SIDE_W))
     w("")
     w("[tab SETUP]")
-    w("# What the pads do: VOICES play the seven voices (General MIDI drum notes,")
-    w("# or the pads PAD LEARN learned); STEPS makes them the 16 step keys, held")
-    w("# while a pad is: hold one and turn a knob to lock the step. PAD LEARN learns")
-    w("# the mode's pads in order; CLEAR PADS forgets them.")
-    width = len(PAD_MODES) * (SWITCH_W + 2) - 2
-    w("enum_h  cx=%d cy=%d sw=%d sh=%d label=\"PADS PLAY\" key=pad_mode options=%s"
-      % (PADS_X0 + width // 2, PADS_CY, SWITCH_W, SETUP_KEY_H, ",".join(PAD_MODES)))
+    w("# The pads play the seven voices: General MIDI drum notes, or the pads PAD")
+    w("# LEARN learned; CLEAR PADS forgets them.")
     w("toggle  cx=%d cy=%d label=\"PAD LEARN\" key=learn bw=%d" % (LEARN_CX, PADS_CY, BIG_KEYS["learn"][1]))
     w("button  cx=%d cy=%d w=%d h=%d label=\"CLEAR PADS\" key=pads_clear" % (CLEAR_CX, PADS_CY, 280, SETUP_KEY_H))
     w("readout cx=640 cy=%d w=1180 h=46 label=\"\" key=pads_info tsize=19 tcolor=9be8ff" % PADS_INFO_Y)
@@ -225,8 +165,7 @@ def layout():
 
 
 # skin_post.py's on/off keys: toggle key -> (caption, w, h)
-BIG_KEYS = {"shift": ("SHIFT", SIDE_W, SIDE_H), "sync": ("MPC SYNC", SIDE_W, SIDE_H),
-            "learn": ("PAD LEARN", 300, 80)}
+BIG_KEYS = {"all": ("ALL", ALL_W, ALL_H), "learn": ("PAD LEARN", 300, 80)}
 
 
 if __name__ == "__main__":

@@ -1,13 +1,12 @@
 # VOLTKIT
 
-A drum computer for the MPC Live III (standalone, modded unit): the whole LXR
+A drum voice module for the MPC Live III (standalone, modded unit): the LXR
 V2 firmware by Erica Synths, which is open source under the GPL, running on
-VOLTKIT's own virtual LXR-02 board inside an MPC plug-in. Its sequencer with
-parameter locks, its menus, kits, patterns and songs, its seven voices and its
-FX all work as on the hardware. You play it from the MPC's touchscreen, which
-shows the LXR-02's front panel, and from the MPC's pads, Q-Links and transport.
-VOLTKIT is an Open MPC VST2 plug-in with a native touchscreen skin, like the
-BOOM family.
+VOLTKIT's own virtual LXR-02 board inside an MPC plug-in. Its seven voices,
+their pages of parameters, its kits and its FX work as on the hardware; the
+MPC's sequencer plays them through the pads (the LXR's own sequencer has no
+keys here). You edit them from the MPC's touchscreen and Q-Links. VOLTKIT is
+an Open MPC VST2 plug-in with a native touchscreen skin, like the BOOM family.
 
 > VOLTKIT is not made, supported or endorsed by Erica Synths. "Erica Synths",
 > "LXR" and "LXR-02" are Erica Synths' trademarks; they appear here only to
@@ -15,51 +14,37 @@ BOOM family.
 
 ## The panel
 
-**PANEL** is the machine's front panel:
+**PANEL**:
 
 - the 2x16 display, as the firmware draws it;
 - the four knobs under the display's four columns: each shows and sets the
-  value of the parameter above it. The MPC's four **Q-Links** turn them too;
-- the **DATA** encoder and its **PUSH**;
-- **SHIFT** (stays on until you tap it again);
-- the voice row (page keys, the seven voices, REC, PLAY, COPY), the page and
-  mode row (OSC, AEG, MOD, FM, CLICK, FILTER, LFO, MIX; VOICE, PERF, LOAD,
-  SAVE) and the 16 step keys, with what SHIFT makes of each under them. Each
-  key has its LED.
+  value of the parameter above it. The MPC's four **Q-Links** turn these four
+  knobs, on every page (no other Q-Link bank does anything);
+- **ALL** (see below);
+- the seven voice keys, and the page keys OSC, AEG, MOD, FM, CLICK, FILTER,
+  LFO and MIX. A page key again shows that page's second screen (a `>` at the
+  display's top right says there is one), and again its first. Each key has
+  its LED.
 
-**MIX** has the six voice faders (the drums, snare, clap/cymbal and hats), a
-master level, and **MPC SYNC**.
-
-**SETUP** sets what the pads do: **VOICES** (they play the seven voices:
-General MIDI drum notes, or the pads **PAD LEARN** learned, remembered for new
-tracks) or **STEPS** (they are the 16 step keys, held as long as a pad is).
+**MIX** has the six voice faders (the drums, snare, clap/cymbal and hats) and
+a master level. **SETUP** has the pads.
 
 ## Playing it
 
-- **Pads** play the voices, or in STEPS are the step keys.
-- **Locks**: as on the LXR, a step held for half a second (its LED blinks)
-  takes what the knobs and Q-Links do (two parameters a step, as on the LXR).
-  On the screen, double-tap the step's key (in VOICE mode; in PERF a held step
-  rolls a voice, so there a double tap is two taps): it lights up and stays
-  held until you tap it again; change pages meanwhile and lock there too
-  (VOLTKIT lets go of the step around the page key and holds it again, since
-  on the LXR a page key pressed with a step held edits its sub-steps). Any
-  other key lets go of it. Or hold the step's
-  pad (STEPS). A voice keeps the last lock it played until its next step. The screen can't hold a key itself:
-  MPC tells a plug-in's skin when a finger touches, double-taps or presses
-  ENTER, never when it lifts.
-- **Recording**: REC on the panel, PLAY on the MPC, and play the pads.
-- **Sync**: with MPC SYNC on (the default), the MPC's tempo, PLAY and STOP run
-  the LXR's sequencer (MIDI clock, start and stop; the card's tempo is set to
-  MID, MIDI clock). As a hardware LXR on the MPC's clock, PLAY starts it from
-  its first step and it plays on through the MPC's loops (the firmware has no
-  song position). The clock keeps its own steady time at the MPC's tempo, so
-  the MPC's position wobbling from block to block doesn't reach it. Off, set a
-  tempo on the PERF page. **STOP twice** stops the LXR.
+- **Pads** play the seven voices: General MIDI drum notes, or the pads
+  **PAD LEARN** learned (remembered for new tracks). Record them on the MPC
+  like any instrument.
+- **ALL**: tap it on, and a knob turned moves its parameter on every voice
+  that has the same parameter in that place: by as much from where each was,
+  or, for a choice of a few settings (a waveform), to the same one. Tap it
+  off and every parameter it moved snaps back. (The screen can't tell a
+  plug-in when a finger lifts, so ALL is a latch rather than a key you hold.)
+  Globals and modulation targets (MIX's second screen: track length, MIDI
+  channel and note; LFO's targets) turn as usual and aren't part of it.
 - **Saving**: each track keeps its own LXR SD card, compressed, inside the MPC
-  project: its kits, patterns, songs and settings, with whatever you saved on
-  the LXR (SAVE) and what it autosaves. New tracks start from the firmware's
-  own Init project (its init kit), the card it writes when it formats one.
+  project: its kits and settings, with what the LXR autosaves. New tracks
+  start from the firmware's own Init kit, the card it writes when it formats
+  one.
 
 ## How it's built
 
@@ -79,9 +64,9 @@ tracks) or **STEPS** (they are the 16 step keys, held as long as a pad is).
   the panel's inputs, MIDI, and the display and LEDs. The firmware keeps its
   state in global variables, so every plug-in instance loads its own copy of
   the engine library.
-- `mpc/`: the adapter (`VoltkitMpc.cpp`: taps, endless knobs, the transport's
-  MIDI clock, the card in the project's state), the panel (`gen_layout.py`)
-  and the skin (`skin/`: the display's 5x8 dot font and the hardware art).
+- `mpc/`: the adapter (`VoltkitMpc.cpp`: taps, endless knobs, ALL, the pads,
+  the card in the project's state), the panel (`gen_layout.py`) and the skin
+  (`skin/`: the display's 5x8 dot font and the hardware art).
 - `tools/make_card.py`: makes the default card (`data/card.vkc`) from the
   card the firmware formats (`voltkit-machine-test --format`), with the tempo
   set to MID and each voice on its own MIDI note (36..42).
@@ -126,9 +111,9 @@ python3 tools/make_card.py init.img data/card.vkc card.img
 build-host/voltkit-machine-test card.img   # the machine: boot, voices, keys, knobs, encoder
 VOLTKIT_ENGINE=$PWD/build-host/libvoltkit-engine.dylib VOLTKIT_CARD=data/card.vkc \
     build-host/voltkit-adapter-test        # the plug-in as the wrapper drives it: pads,
-                                           # locks, recording, the sequencer on the MPC's clock
+                                           # pages, knobs, ALL, the state
 VOLTKIT_ENGINE=$PWD/build-host/libvoltkit-engine.dylib VOLTKIT_CARD=data/card.vkc \
-    build-host/voltkit-stress-test 80      # random playing: taps, locks, pages, modes, transport
+    build-host/voltkit-stress-test 30      # random playing: voices, pages, knobs, ALL
 ```
 
 `mpc/build.sh` also cross-builds both for the MPC (`mpc/build/aarch64/`).

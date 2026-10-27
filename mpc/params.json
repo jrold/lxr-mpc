@@ -34,45 +34,13 @@
    "dynamic_display": true
   },
   {
-   "key": "enc",
-   "name": "Encoder",
-   "min": 0,
-   "max": 1,
-   "default": 0.5
-  },
-  {
-   "key": "enc_push",
-   "name": "Encoder Push",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "shift",
-   "name": "Shift",
+   "key": "all",
+   "name": "All Voices",
    "options": [
     "Off",
     "On"
    ],
    "default": 0
-  },
-  {
-   "key": "hold",
-   "name": "Unused",
-   "options": [
-    "Off",
-    "On"
-   ],
-   "default": 0
-  },
-  {
-   "key": "btn_00",
-   "name": "Page Up",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
   },
   {
    "key": "btn_01",
@@ -131,66 +99,6 @@
    "hold_ms": 120
   },
   {
-   "key": "btn_08",
-   "name": "Click",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_09",
-   "name": "Filter",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_10",
-   "name": "Lfo",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_11",
-   "name": "Mix",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_12",
-   "name": "Step 16",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_13",
-   "name": "Step 15",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_14",
-   "name": "Step 14",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_15",
-   "name": "Step 13",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
    "key": "btn_16",
    "name": "Osc",
    "min": 0,
@@ -223,148 +131,32 @@
    "hold_ms": 120
   },
   {
-   "key": "btn_20",
-   "name": "Step 12",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_21",
-   "name": "Step 11",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_22",
-   "name": "Step 10",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_23",
-   "name": "Step 9",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_24",
-   "name": "Voice",
+   "key": "btn_08",
+   "name": "Click",
    "min": 0,
    "max": 1,
    "momentary": true,
    "hold_ms": 120
   },
   {
-   "key": "btn_25",
-   "name": "Perf",
+   "key": "btn_09",
+   "name": "Filter",
    "min": 0,
    "max": 1,
    "momentary": true,
    "hold_ms": 120
   },
   {
-   "key": "btn_26",
-   "name": "Load",
+   "key": "btn_10",
+   "name": "Lfo",
    "min": 0,
    "max": 1,
    "momentary": true,
    "hold_ms": 120
   },
   {
-   "key": "btn_27",
-   "name": "Save",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_28",
-   "name": "Step 8",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_29",
-   "name": "Step 7",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_30",
-   "name": "Step 6",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_31",
-   "name": "Step 5",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_33",
-   "name": "Play",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_34",
-   "name": "Rec",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_35",
-   "name": "Copy",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "btn_36",
-   "name": "Step 4",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_37",
-   "name": "Step 3",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_38",
-   "name": "Step 2",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_39",
-   "name": "Step 1",
-   "min": 0,
-   "max": 1,
-   "default": 0
-  },
-  {
-   "key": "btn_40",
-   "name": "Page Down",
+   "key": "btn_11",
+   "name": "Mix",
    "min": 0,
    "max": 1,
    "momentary": true,
@@ -427,23 +219,6 @@
    "dynamic_display": true
   },
   {
-   "key": "sync",
-   "name": "MPC Sync",
-   "options": [
-    "Off",
-    "On"
-   ],
-   "default": 1
-  },
-  {
-   "key": "led_00",
-   "name": "LED 0",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
    "key": "led_01",
    "name": "LED 1",
    "min": 0,
@@ -500,70 +275,6 @@
    "display": "int"
   },
   {
-   "key": "led_08",
-   "name": "LED 8",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_09",
-   "name": "LED 9",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_10",
-   "name": "LED 10",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_11",
-   "name": "LED 11",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_12",
-   "name": "LED 12",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_13",
-   "name": "LED 13",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_14",
-   "name": "LED 14",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_15",
-   "name": "LED 15",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
    "key": "led_16",
    "name": "LED 16",
    "min": 0,
@@ -596,168 +307,32 @@
    "display": "int"
   },
   {
-   "key": "led_20",
-   "name": "LED 20",
+   "key": "led_08",
+   "name": "LED 8",
    "min": 0,
    "max": 1,
    "default": 0,
    "display": "int"
   },
   {
-   "key": "led_21",
-   "name": "LED 21",
+   "key": "led_09",
+   "name": "LED 9",
    "min": 0,
    "max": 1,
    "default": 0,
    "display": "int"
   },
   {
-   "key": "led_22",
-   "name": "LED 22",
+   "key": "led_10",
+   "name": "LED 10",
    "min": 0,
    "max": 1,
    "default": 0,
    "display": "int"
   },
   {
-   "key": "led_23",
-   "name": "LED 23",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_24",
-   "name": "LED 24",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_25",
-   "name": "LED 25",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_26",
-   "name": "LED 26",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_27",
-   "name": "LED 27",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_28",
-   "name": "LED 28",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_29",
-   "name": "LED 29",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_30",
-   "name": "LED 30",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_31",
-   "name": "LED 31",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_32",
-   "name": "LED 32",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_33",
-   "name": "LED 33",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_34",
-   "name": "LED 34",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_35",
-   "name": "LED 35",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_36",
-   "name": "LED 36",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_37",
-   "name": "LED 37",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_38",
-   "name": "LED 38",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_39",
-   "name": "LED 39",
-   "min": 0,
-   "max": 1,
-   "default": 0,
-   "display": "int"
-  },
-  {
-   "key": "led_40",
-   "name": "LED 40",
+   "key": "led_11",
+   "name": "LED 11",
    "min": 0,
    "max": 1,
    "default": 0,
@@ -1020,15 +595,6 @@
    "display": "int"
   },
   {
-   "key": "pad_mode",
-   "name": "Pads",
-   "options": [
-    "VOICES",
-    "STEPS"
-   ],
-   "default": 0
-  },
-  {
    "key": "learn",
    "name": "Pad Learn",
    "options": [
@@ -1052,134 +618,6 @@
    "max": 1,
    "display": "string",
    "type": "readout"
-  },
-  {
-   "key": "lock_39",
-   "name": "Lock Step 1",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_38",
-   "name": "Lock Step 2",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_37",
-   "name": "Lock Step 3",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_36",
-   "name": "Lock Step 4",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_31",
-   "name": "Lock Step 5",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_30",
-   "name": "Lock Step 6",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_29",
-   "name": "Lock Step 7",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_28",
-   "name": "Lock Step 8",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_23",
-   "name": "Lock Step 9",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_22",
-   "name": "Lock Step 10",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_21",
-   "name": "Lock Step 11",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_20",
-   "name": "Lock Step 12",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_15",
-   "name": "Lock Step 13",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_14",
-   "name": "Lock Step 14",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_13",
-   "name": "Lock Step 15",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
-  },
-  {
-   "key": "lock_12",
-   "name": "Lock Step 16",
-   "min": 0,
-   "max": 1,
-   "momentary": true,
-   "hold_ms": 120
   }
  ],
  "sections": [
@@ -1190,10 +628,7 @@
     "knob2",
     "knob3",
     "knob4",
-    "enc",
-    "enc_push",
-    "shift",
-    "btn_00",
+    "all",
     "btn_01",
     "btn_02",
     "btn_03",
@@ -1201,38 +636,14 @@
     "btn_05",
     "btn_06",
     "btn_07",
-    "btn_08",
-    "btn_09",
-    "btn_10",
-    "btn_11",
-    "btn_12",
-    "btn_13",
-    "btn_14",
-    "btn_15",
     "btn_16",
     "btn_17",
     "btn_18",
     "btn_19",
-    "btn_20",
-    "btn_21",
-    "btn_22",
-    "btn_23",
-    "btn_24",
-    "btn_25",
-    "btn_26",
-    "btn_27",
-    "btn_28",
-    "btn_29",
-    "btn_30",
-    "btn_31",
-    "btn_33",
-    "btn_34",
-    "btn_35",
-    "btn_36",
-    "btn_37",
-    "btn_38",
-    "btn_39",
-    "btn_40"
+    "btn_08",
+    "btn_09",
+    "btn_10",
+    "btn_11"
    ]
   },
   {
@@ -1244,14 +655,12 @@
     "fader4",
     "fader5",
     "fader6",
-    "master",
-    "sync"
+    "master"
    ]
   },
   {
    "label": "Setup",
    "keys": [
-    "pad_mode",
     "learn",
     "pads_clear",
     "pads_info"
