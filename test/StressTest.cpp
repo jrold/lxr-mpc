@@ -38,6 +38,17 @@ struct Track
     void* inst = nullptr;
     double ppq = 0.0, bpm = 120.0;
     bool playing = false;
+    double now = 0.0;                  // seconds rendered
+    std::array<double, 41> touchedAt {};   // each key's last touch
+
+    // Two touches on a key closer than a double tap's time are one (the MPC's
+    // Double Click, which a single tap or grab here doesn't send): wait it out.
+    void apart(const int b)
+    {
+        const double wait = touchedAt[static_cast<std::size_t>(b)] + 0.45 - now;
+        if (wait > 0.0)
+            run(wait);
+    }
 
     Track() { inst = E->create(dataDir.c_str()); }
     ~Track() { E->destroy(inst); }
@@ -55,6 +66,7 @@ struct Track
         {
             E->song_pos(inst, ppq, bpm, playing ? 1 : 0, kBlock);
             E->render(inst, out, kBlock);
+            now += static_cast<double>(kBlock) / kRate;
             if (playing)
                 ppq += kBlock / (60.0 / bpm * kRate);
             char key[64];
@@ -74,13 +86,17 @@ struct Track
         std::snprintf(k, sizeof k, "btn_%02d", b);
         return k;
     }
-    // A skin key's tap: MPC flips its value twice (the key's Mouse Down and its Button)
-    void tap(const int b)
+    // A skin key's touch, as the MPC sets it: its Mouse Down flips the value
+    // shown, its Button sets 1, `echo` seconds later
+    void touch(const int b, const double echo)
     {
-        const double v = num(btn(b));
-        set(btn(b), 1.0 - v);
-        set(btn(b), v);
+        touchedAt[static_cast<std::size_t>(b)] = now;
+        set(btn(b), 1.0 - num(btn(b)));
+        if (echo > 0.0)
+            run(echo);
+        set(btn(b), 1.0);
     }
+    void tap(const int b, const double echo = 0.0) { touch(b, echo); }
     std::string steps(const int voice)
     {
         set(btn(1 + voice), 1.0);   // the voice key: its steps on the step LEDs
@@ -113,6 +129,7 @@ int main(int argc, char** argv)
     {
         std::mt19937 rng(static_cast<unsigned>(1000 + run));
         const auto pick = [&](const int n) { return static_cast<int>(rng() % static_cast<unsigned>(n)); };
+        const auto finger = [&] { return 0.003 * pick(40); };   // the Button's set after the Mouse Down's
         Track t;
         t.run(1.0);
         t.set("btn_01", 1.0);   // DRUM 1
@@ -132,26 +149,32 @@ int main(int argc, char** argv)
             if (what <= 2 && held < 0)   // a step tapped
             {
                 const int s = pick(16);
-                t.tap(kSteps[static_cast<std::size_t>(s)]);
+                t.apart(kSteps[static_cast<std::size_t>(s)]);
+                t.tap(kSteps[static_cast<std::size_t>(s)], finger());
                 want[static_cast<std::size_t>(s)] = !want[static_cast<std::size_t>(s)];
                 std::snprintf(line, sizeof line, "tap %d; ", s + 1);
             }
             else if (what == 3 && held < 0)   // a double tap: grab it
             {
                 const int s = pick(16);
-                t.tap(kSteps[static_cast<std::size_t>(s)]);
-                t.run(0.06 + 0.003 * pick(100));   // a finger's second tap
-                t.tap(kSteps[static_cast<std::size_t>(s)]);
+                const int b = kSteps[static_cast<std::size_t>(s)];
+                t.apart(b);
+                t.tap(b, finger());
+                t.run(0.05 + 0.003 * pick(80));   // to the second touch: its Double Click, then its Button
+                t.touchedAt[static_cast<std::size_t>(b)] = t.now;
+                t.set(t.btn(b), 1.0 - t.num(t.btn(b)));
                 char k[8];
-                std::snprintf(k, sizeof k, "lock_%02d", kSteps[static_cast<std::size_t>(s)]);
+                std::snprintf(k, sizeof k, "lock_%02d", b);
                 t.set(k, 1.0);
+                t.run(finger());
+                t.set(t.btn(b), 1.0);
                 held = s;
                 std::snprintf(line, sizeof line, "grab %d; ", s + 1);
             }
             else if (what == 4)   // a page key
             {
                 const int p = pick(8);
-                t.tap(kPages[static_cast<std::size_t>(p)]);
+                t.tap(kPages[static_cast<std::size_t>(p)], finger());
                 std::snprintf(line, sizeof line, "page %d; ", p);
             }
             else if (what <= 6)   // a knob or a Q-Link
@@ -163,14 +186,15 @@ int main(int argc, char** argv)
             }
             else if (what == 7 && held >= 0)   // let go
             {
-                t.tap(kSteps[static_cast<std::size_t>(held)]);
+                t.apart(kSteps[static_cast<std::size_t>(held)]);
+                t.tap(kSteps[static_cast<std::size_t>(held)], finger());
                 std::snprintf(line, sizeof line, "let go %d; ", held + 1);
                 held = -1;
             }
             else if (what == 9 && modes)   // a mode key, or REC
             {
                 const int m = pick(3);
-                t.tap(m == 0 ? kVoiceMode : m == 1 ? kPerfMode : kRec);
+                t.tap(m == 0 ? kVoiceMode : m == 1 ? kPerfMode : kRec, finger());
                 std::snprintf(line, sizeof line, m == 0 ? "VOICE; " : m == 1 ? "PERF; " : "REC; ");
             }
             else if (what == 8)   // the transport
@@ -197,7 +221,7 @@ int main(int argc, char** argv)
         }
         if (held >= 0)
         {
-            t.tap(kSteps[static_cast<std::size_t>(held)]);
+            t.tap(kSteps[static_cast<std::size_t>(held)], 0.1);
             log += "let go; ";
         }
         t.playing = false;

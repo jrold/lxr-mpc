@@ -75,8 +75,7 @@ using Clock = std::chrono::steady_clock;
 constexpr int kMaxFrames = 128;                 // render() gets 1..128 frames
 constexpr int kClockLead = 260;                 // frames the MIDI clock goes early: steps then sound on the
                                                 // beat, +-0.8 ms (the LXR's 64-frame blocks; test/AdapterTest.cpp)
-constexpr int kDebounceMs = 40;                 // a skin key's touch sets it twice, at once; a finger's
-                                                // second tap is never this quick
+constexpr int kDebounceMs = 150;                // a skin key's touch sets it twice (test/StressTest.cpp)
 constexpr auto kDoubleStopWindow = std::chrono::milliseconds(1200);
 constexpr auto kKnobSettle = std::chrono::milliseconds(300);   // a knob still turning reads its target
 constexpr int kButtons = VOLT_BUTTONS;          // 41
@@ -302,7 +301,7 @@ public:
         }
         if (const int b = indexed(k, "btn_", kButtons); b >= 0)
         {
-            if (v != 0.0 || b == grab.button)   // the held key reads 1: its tap may set 0
+            if (touched(k, v != 0.0 || b == grab.button))   // the held key reads 1: its tap may set 0
                 tapKey(b);
             // a tap flips the key's value twice on MPC's side; if it ends other
             // than lit-while-held, show it again as it is
@@ -343,7 +342,7 @@ public:
         }
         if (k == "enc_push")
         {
-            if (v != 0.0 && machine && !bouncing(k))
+            if (touched(k, v != 0.0) && machine)
                 machine->encoder_push();
             return;
         }
@@ -653,7 +652,7 @@ private:
     // held for a lock, the end of the lock.
     void tapKey(const int b)
     {
-        if (bouncing(indexedKey("btn_", b)) || !machine)
+        if (!machine)
             return;
         const auto i = static_cast<std::size_t>(b);
         if (b == grab.button)
@@ -800,15 +799,23 @@ private:
             changed.insert("shift");
     }
 
-    // A skin key's tap sets its parameter twice (its Mouse Down and its Button
-    // both flip it): the second, within debounceMs of audio, is the same tap.
-    bool bouncing(const std::string& key)
+    // A skin key's touch sets its parameter twice: its Mouse Down flips it, and
+    // its Button sets it to 1 (which, the key shown unlit again in between, is
+    // another press). Sets less than debounceMs of audio apart are one touch,
+    // and a touch is one press: the first of its sets that `presses` (a 1, or
+    // any set of the held key). A double tap's second touch can merge into the
+    // first: grabStep makes up for it.
+    bool touched(const std::string& key, const bool presses)
     {
-        const auto it = lastPress.find(key);
-        if (it != lastPress.end() && framesRendered - it->second < static_cast<long long>(debounceMs) * VOLT_SAMPLE_RATE / 1000)
-            return true;
-        lastPress[key] = framesRendered;
-        return false;
+        Touch& t = touches[key];
+        const bool fresh = framesRendered - t.lastSet >= static_cast<long long>(debounceMs) * VOLT_SAMPLE_RATE / 1000;
+        t.lastSet = framesRendered;
+        if (fresh)
+            t.pressed = false;
+        if (!presses || t.pressed)
+            return false;
+        t.pressed = true;
+        return true;
     }
 
     // ---- knobs: the firmware's values
@@ -1190,8 +1197,13 @@ private:
     std::set<std::string> changed;   // keys to report to MPC (mpc_engine_changed)
 
     std::optional<Clock::time_point> lastSuspend;
-    std::map<std::string, long long> lastPress;   // frames rendered at each key's last press
-    // VOLTKIT_DEBOUNCE_MS, VOLTKIT_RECENTRE_MS: the offline test turns them off.
+    struct Touch
+    {
+        long long lastSet = -(1LL << 40);   // frames rendered at the key's last set
+        bool pressed = false;               // this touch has pressed it
+    };
+    std::map<std::string, Touch> touches;
+    // VOLTKIT_DEBOUNCE_MS, VOLTKIT_RECENTRE_MS: the offline test turns them off (its taps set a key once).
     const int debounceMs = std::getenv("VOLTKIT_DEBOUNCE_MS") ? std::atoi(std::getenv("VOLTKIT_DEBOUNCE_MS")) : kDebounceMs;
     const bool keyLog = std::getenv("VOLTKIT_KEYLOG") != nullptr;
     const int recentreMs = std::getenv("VOLTKIT_RECENTRE_MS") ? std::atoi(std::getenv("VOLTKIT_RECENTRE_MS")) : kRecentreMs;
