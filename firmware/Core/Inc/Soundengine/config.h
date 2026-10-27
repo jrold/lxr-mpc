@@ -83,6 +83,13 @@
 
 //typedef  uint8_t bool;
 
+#ifdef VOLTKIT
+// VOLTKIT (modified for the MPC plug-in): no tightly coupled memory on a PC
+// or the MPC, so these place nothing.
+#define INDTCM
+#define INDTCMZ
+#define IN_ITCM_RAM
+#else
 // Helper to declare variable in CCM memory, pre-loaded from flash at startup
 #define INDTCM __attribute__ ((section(".dtcm")))
 
@@ -90,5 +97,6 @@
 #define INDTCMZ __attribute__ ((section(".dtcmz")))
 
 #define IN_ITCM_RAM __attribute__((section(".itcm_text")))
+#endif
 
 #endif /* CONFIG_H_ */

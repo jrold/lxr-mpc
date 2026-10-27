@@ -139,6 +139,11 @@ float diode(float in)
 	//float index = (in+4.2f) * 30.47f; // [0:256]
 
 	uint16_t itg = (int16_t) index;
+#ifdef VOLTKIT
+	// VOLTKIT (modified): a full-scale input made itg 256 and read past the
+	// 257-entry table.
+	if(itg > 255) itg = 255;
+#endif
 	float frac = index - itg;
 	return lerp(table_1n914[itg], table_1n914[itg+1], frac);
 

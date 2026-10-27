@@ -1,0 +1,3127 @@
+{
+ "name": "VOLTKIT",
+ "params": [
+  {
+   "key": "d1_page",
+   "name": "D1 Page",
+   "options": [
+    "OSC",
+    "AMP",
+    "MOD",
+    "FM",
+    "CLICK",
+    "FILTER",
+    "LFO",
+    "MIX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_coarse",
+   "name": "D1 Coarse",
+   "min": 0,
+   "max": 127,
+   "default": 31,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_fine",
+   "name": "D1 Fine",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_wave",
+   "name": "D1 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_pwm",
+   "name": "D1 PWM",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_attack",
+   "name": "D1 Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_decay",
+   "name": "D1 Decay",
+   "min": 0,
+   "max": 127,
+   "default": 21,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_slope",
+   "name": "D1 Slope",
+   "min": 0,
+   "max": 127,
+   "default": 46,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_pdecay",
+   "name": "D1 Pitch Decay",
+   "min": 0,
+   "max": 127,
+   "default": 26,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_pslope",
+   "name": "D1 Pitch Slope",
+   "min": 0,
+   "max": 127,
+   "default": 22,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_pamount",
+   "name": "D1 Pitch Amount",
+   "min": 0,
+   "max": 127,
+   "default": 44,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_veldest",
+   "name": "D1 Velo Dest",
+   "options": [
+    "Off",
+    "Osc Coarse",
+    "Osc Fine",
+    "Osc Wave",
+    "Osc PWM",
+    "Amp Attack",
+    "Amp Decay",
+    "Amp Slope",
+    "Pitch Decay",
+    "Pitch Slope",
+    "Pitch Amount",
+    "Velo Dest",
+    "Velo Amount",
+    "Velo Volume",
+    "FM Amount",
+    "FM Pitch",
+    "FM Wave",
+    "FM Mode",
+    "Click Wave",
+    "Click Level",
+    "Click Pitch",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Filter Type",
+    "Filter Drive",
+    "LFO Rate",
+    "LFO Sync",
+    "LFO Amount",
+    "LFO Wave",
+    "LFO Retrigger",
+    "LFO Phase",
+    "Mix Volume",
+    "Mix Pan",
+    "Sample Rate",
+    "Mix Drive",
+    "FX P1",
+    "FX P2",
+    "FX P3",
+    "FX P4"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_velamt",
+   "name": "D1 Velo Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_velvol",
+   "name": "D1 Velo Volume",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_fmamt",
+   "name": "D1 FM Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_fmfreq",
+   "name": "D1 FM Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_fmwave",
+   "name": "D1 FM Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_fmmode",
+   "name": "D1 FM Mode",
+   "options": [
+    "FM",
+    "Mix"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_twave",
+   "name": "D1 Click Wave",
+   "options": [
+    "Snap",
+    "Offset",
+    "Click",
+    "Click 2",
+    "Tick",
+    "Kick",
+    "Rim",
+    "Drop",
+    "Hat",
+    "Clap",
+    "Kick 2",
+    "Snare",
+    "Tom",
+    "Snap 2"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_tlevel",
+   "name": "D1 Click Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_tfreq",
+   "name": "D1 Click Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_cutoff",
+   "name": "D1 Cutoff",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_reso",
+   "name": "D1 Resonance",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_ftype",
+   "name": "D1 Filter Type",
+   "options": [
+    "Low Pass",
+    "High Pass",
+    "Band Pass",
+    "Unity BP",
+    "Notch",
+    "Peak",
+    "Low Pass 2",
+    "Off"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_fdrive",
+   "name": "D1 Filter Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_lrate",
+   "name": "D1 LFO Rate",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_lsync",
+   "name": "D1 LFO Sync",
+   "options": [
+    "Free",
+    "4/1",
+    "2/1",
+    "1/1",
+    "1/2",
+    "1/3",
+    "1/4",
+    "1/6",
+    "1/8",
+    "1/12",
+    "1/16",
+    "1/32"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_lamt",
+   "name": "D1 LFO Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_lwave",
+   "name": "D1 LFO Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw Up",
+    "Saw Down",
+    "Square",
+    "Random",
+    "Exp Up",
+    "Exp Down"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_lretrig",
+   "name": "D1 LFO Retrigger",
+   "options": [
+    "Off",
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_loffset",
+   "name": "D1 LFO Phase",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_lvoice",
+   "name": "D1 LFO Voice",
+   "options": [
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d1_ldest",
+   "name": "D1 LFO Dest",
+   "min": 0,
+   "max": 40,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 2.5,
+   "type": "stepper"
+  },
+  {
+   "key": "d1_ldest_prev",
+   "name": "D1 Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "d1_ldest",
+   "step_delta": -1
+  },
+  {
+   "key": "d1_ldest_next",
+   "name": "D1 Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "d1_ldest",
+   "step_delta": 1
+  },
+  {
+   "key": "d1_volume",
+   "name": "D1 Volume",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_pan",
+   "name": "D1 Pan",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_crush",
+   "name": "D1 Sample Rate",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_drive",
+   "name": "D1 Drive",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d1_out",
+   "name": "D1 Output",
+   "options": [
+    "Main",
+    "FX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_page",
+   "name": "D2 Page",
+   "options": [
+    "OSC",
+    "AMP",
+    "MOD",
+    "FM",
+    "CLICK",
+    "FILTER",
+    "LFO",
+    "MIX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_coarse",
+   "name": "D2 Coarse",
+   "min": 0,
+   "max": 127,
+   "default": 41,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_fine",
+   "name": "D2 Fine",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_wave",
+   "name": "D2 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_pwm",
+   "name": "D2 PWM",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_attack",
+   "name": "D2 Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_decay",
+   "name": "D2 Decay",
+   "min": 0,
+   "max": 127,
+   "default": 13,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_slope",
+   "name": "D2 Slope",
+   "min": 0,
+   "max": 127,
+   "default": 11,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_pdecay",
+   "name": "D2 Pitch Decay",
+   "min": 0,
+   "max": 127,
+   "default": 93,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_pslope",
+   "name": "D2 Pitch Slope",
+   "min": 0,
+   "max": 127,
+   "default": 10,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_pamount",
+   "name": "D2 Pitch Amount",
+   "min": 0,
+   "max": 127,
+   "default": 14,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_veldest",
+   "name": "D2 Velo Dest",
+   "options": [
+    "Off",
+    "Osc Coarse",
+    "Osc Fine",
+    "Osc Wave",
+    "Osc PWM",
+    "Amp Attack",
+    "Amp Decay",
+    "Amp Slope",
+    "Pitch Decay",
+    "Pitch Slope",
+    "Pitch Amount",
+    "Velo Dest",
+    "Velo Amount",
+    "Velo Volume",
+    "FM Amount",
+    "FM Pitch",
+    "FM Wave",
+    "FM Mode",
+    "Click Wave",
+    "Click Level",
+    "Click Pitch",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Filter Type",
+    "Filter Drive",
+    "LFO Rate",
+    "LFO Sync",
+    "LFO Amount",
+    "LFO Wave",
+    "LFO Retrigger",
+    "LFO Phase",
+    "Mix Volume",
+    "Mix Pan",
+    "Sample Rate",
+    "Mix Drive",
+    "FX P1",
+    "FX P2",
+    "FX P3",
+    "FX P4"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_velamt",
+   "name": "D2 Velo Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_velvol",
+   "name": "D2 Velo Volume",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_fmamt",
+   "name": "D2 FM Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_fmfreq",
+   "name": "D2 FM Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_fmwave",
+   "name": "D2 FM Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_fmmode",
+   "name": "D2 FM Mode",
+   "options": [
+    "FM",
+    "Mix"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_twave",
+   "name": "D2 Click Wave",
+   "options": [
+    "Snap",
+    "Offset",
+    "Click",
+    "Click 2",
+    "Tick",
+    "Kick",
+    "Rim",
+    "Drop",
+    "Hat",
+    "Clap",
+    "Kick 2",
+    "Snare",
+    "Tom",
+    "Snap 2"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_tlevel",
+   "name": "D2 Click Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_tfreq",
+   "name": "D2 Click Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_cutoff",
+   "name": "D2 Cutoff",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_reso",
+   "name": "D2 Resonance",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_ftype",
+   "name": "D2 Filter Type",
+   "options": [
+    "Low Pass",
+    "High Pass",
+    "Band Pass",
+    "Unity BP",
+    "Notch",
+    "Peak",
+    "Low Pass 2",
+    "Off"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_fdrive",
+   "name": "D2 Filter Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_lrate",
+   "name": "D2 LFO Rate",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_lsync",
+   "name": "D2 LFO Sync",
+   "options": [
+    "Free",
+    "4/1",
+    "2/1",
+    "1/1",
+    "1/2",
+    "1/3",
+    "1/4",
+    "1/6",
+    "1/8",
+    "1/12",
+    "1/16",
+    "1/32"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_lamt",
+   "name": "D2 LFO Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_lwave",
+   "name": "D2 LFO Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw Up",
+    "Saw Down",
+    "Square",
+    "Random",
+    "Exp Up",
+    "Exp Down"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_lretrig",
+   "name": "D2 LFO Retrigger",
+   "options": [
+    "Off",
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_loffset",
+   "name": "D2 LFO Phase",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_lvoice",
+   "name": "D2 LFO Voice",
+   "options": [
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d2_ldest",
+   "name": "D2 LFO Dest",
+   "min": 0,
+   "max": 40,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 2.5,
+   "type": "stepper"
+  },
+  {
+   "key": "d2_ldest_prev",
+   "name": "D2 Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "d2_ldest",
+   "step_delta": -1
+  },
+  {
+   "key": "d2_ldest_next",
+   "name": "D2 Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "d2_ldest",
+   "step_delta": 1
+  },
+  {
+   "key": "d2_volume",
+   "name": "D2 Volume",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_pan",
+   "name": "D2 Pan",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_crush",
+   "name": "D2 Sample Rate",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_drive",
+   "name": "D2 Drive",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d2_out",
+   "name": "D2 Output",
+   "options": [
+    "Main",
+    "FX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_page",
+   "name": "D3 Page",
+   "options": [
+    "OSC",
+    "AMP",
+    "MOD",
+    "FM",
+    "CLICK",
+    "FILTER",
+    "LFO",
+    "MIX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_coarse",
+   "name": "D3 Coarse",
+   "min": 0,
+   "max": 127,
+   "default": 58,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_fine",
+   "name": "D3 Fine",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_wave",
+   "name": "D3 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_pwm",
+   "name": "D3 PWM",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_attack",
+   "name": "D3 Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_decay",
+   "name": "D3 Decay",
+   "min": 0,
+   "max": 127,
+   "default": 3,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_slope",
+   "name": "D3 Slope",
+   "min": 0,
+   "max": 127,
+   "default": 4,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_pdecay",
+   "name": "D3 Pitch Decay",
+   "min": 0,
+   "max": 127,
+   "default": 7,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_pslope",
+   "name": "D3 Pitch Slope",
+   "min": 0,
+   "max": 127,
+   "default": 14,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_pamount",
+   "name": "D3 Pitch Amount",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_veldest",
+   "name": "D3 Velo Dest",
+   "options": [
+    "Off",
+    "Osc Coarse",
+    "Osc Fine",
+    "Osc Wave",
+    "Osc PWM",
+    "Amp Attack",
+    "Amp Decay",
+    "Amp Slope",
+    "Pitch Decay",
+    "Pitch Slope",
+    "Pitch Amount",
+    "Velo Dest",
+    "Velo Amount",
+    "Velo Volume",
+    "FM Amount",
+    "FM Pitch",
+    "FM Wave",
+    "FM Mode",
+    "Click Wave",
+    "Click Level",
+    "Click Pitch",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Filter Type",
+    "Filter Drive",
+    "LFO Rate",
+    "LFO Sync",
+    "LFO Amount",
+    "LFO Wave",
+    "LFO Retrigger",
+    "LFO Phase",
+    "Mix Volume",
+    "Mix Pan",
+    "Sample Rate",
+    "Mix Drive",
+    "FX P1",
+    "FX P2",
+    "FX P3",
+    "FX P4"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_velamt",
+   "name": "D3 Velo Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_velvol",
+   "name": "D3 Velo Volume",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_fmamt",
+   "name": "D3 FM Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_fmfreq",
+   "name": "D3 FM Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_fmwave",
+   "name": "D3 FM Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_fmmode",
+   "name": "D3 FM Mode",
+   "options": [
+    "FM",
+    "Mix"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_twave",
+   "name": "D3 Click Wave",
+   "options": [
+    "Snap",
+    "Offset",
+    "Click",
+    "Click 2",
+    "Tick",
+    "Kick",
+    "Rim",
+    "Drop",
+    "Hat",
+    "Clap",
+    "Kick 2",
+    "Snare",
+    "Tom",
+    "Snap 2"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_tlevel",
+   "name": "D3 Click Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_tfreq",
+   "name": "D3 Click Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_cutoff",
+   "name": "D3 Cutoff",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_reso",
+   "name": "D3 Resonance",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_ftype",
+   "name": "D3 Filter Type",
+   "options": [
+    "Low Pass",
+    "High Pass",
+    "Band Pass",
+    "Unity BP",
+    "Notch",
+    "Peak",
+    "Low Pass 2",
+    "Off"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_fdrive",
+   "name": "D3 Filter Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_lrate",
+   "name": "D3 LFO Rate",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_lsync",
+   "name": "D3 LFO Sync",
+   "options": [
+    "Free",
+    "4/1",
+    "2/1",
+    "1/1",
+    "1/2",
+    "1/3",
+    "1/4",
+    "1/6",
+    "1/8",
+    "1/12",
+    "1/16",
+    "1/32"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_lamt",
+   "name": "D3 LFO Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_lwave",
+   "name": "D3 LFO Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw Up",
+    "Saw Down",
+    "Square",
+    "Random",
+    "Exp Up",
+    "Exp Down"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_lretrig",
+   "name": "D3 LFO Retrigger",
+   "options": [
+    "Off",
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_loffset",
+   "name": "D3 LFO Phase",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_lvoice",
+   "name": "D3 LFO Voice",
+   "options": [
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "d3_ldest",
+   "name": "D3 LFO Dest",
+   "min": 0,
+   "max": 40,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 2.5,
+   "type": "stepper"
+  },
+  {
+   "key": "d3_ldest_prev",
+   "name": "D3 Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "d3_ldest",
+   "step_delta": -1
+  },
+  {
+   "key": "d3_ldest_next",
+   "name": "D3 Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "d3_ldest",
+   "step_delta": 1
+  },
+  {
+   "key": "d3_volume",
+   "name": "D3 Volume",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_pan",
+   "name": "D3 Pan",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_crush",
+   "name": "D3 Sample Rate",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_drive",
+   "name": "D3 Drive",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "d3_out",
+   "name": "D3 Output",
+   "options": [
+    "Main",
+    "FX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_page",
+   "name": "SN Page",
+   "options": [
+    "OSC",
+    "AMP",
+    "MOD",
+    "CLICK",
+    "FILTER",
+    "LFO",
+    "MIX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_coarse",
+   "name": "SN Coarse",
+   "min": 0,
+   "max": 127,
+   "default": 45,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_fine",
+   "name": "SN Fine",
+   "min": 0,
+   "max": 127,
+   "default": 64,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_noise",
+   "name": "SN Noise Freq",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_nmix",
+   "name": "SN Noise Mix",
+   "min": 0,
+   "max": 127,
+   "default": 61,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_wave",
+   "name": "SN Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 1
+  },
+  {
+   "key": "sn_pwm",
+   "name": "SN PWM",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_attack",
+   "name": "SN Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_decay",
+   "name": "SN Decay",
+   "min": 0,
+   "max": 127,
+   "default": 10,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_repeat",
+   "name": "SN Repeat",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_slope",
+   "name": "SN Slope",
+   "min": 0,
+   "max": 127,
+   "default": 10,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_pdecay",
+   "name": "SN Pitch Decay",
+   "min": 0,
+   "max": 127,
+   "default": 14,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_pslope",
+   "name": "SN Pitch Slope",
+   "min": 0,
+   "max": 127,
+   "default": 15,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_pamount",
+   "name": "SN Pitch Amount",
+   "min": 0,
+   "max": 127,
+   "default": 81,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_veldest",
+   "name": "SN Velo Dest",
+   "options": [
+    "Off",
+    "Osc Coarse",
+    "Osc Fine",
+    "Noise Freq",
+    "Noise Mix",
+    "Osc Wave",
+    "Osc PWM",
+    "Amp Attack",
+    "Amp Decay",
+    "Amp Repeat",
+    "Amp Slope",
+    "Pitch Decay",
+    "Pitch Slope",
+    "Pitch Amount",
+    "Velo Dest",
+    "Velo Amount",
+    "Velo Volume",
+    "Click Wave",
+    "Click Level",
+    "Click Pitch",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Filter Type",
+    "Filter Drive",
+    "LFO Rate",
+    "LFO Sync",
+    "LFO Amount",
+    "LFO Wave",
+    "LFO Retrigger",
+    "LFO Phase",
+    "Mix Volume",
+    "Mix Pan",
+    "Sample Rate",
+    "Mix Drive",
+    "FX P1",
+    "FX P2",
+    "FX P3",
+    "FX P4"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_velamt",
+   "name": "SN Velo Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_velvol",
+   "name": "SN Velo Volume",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_twave",
+   "name": "SN Click Wave",
+   "options": [
+    "Snap",
+    "Offset",
+    "Click",
+    "Click 2",
+    "Tick",
+    "Kick",
+    "Rim",
+    "Drop",
+    "Hat",
+    "Clap",
+    "Kick 2",
+    "Snare",
+    "Tom",
+    "Snap 2"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_tlevel",
+   "name": "SN Click Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_tfreq",
+   "name": "SN Click Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_cutoff",
+   "name": "SN Cutoff",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_reso",
+   "name": "SN Resonance",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_ftype",
+   "name": "SN Filter Type",
+   "options": [
+    "Low Pass",
+    "High Pass",
+    "Band Pass",
+    "Unity BP",
+    "Notch",
+    "Peak",
+    "Low Pass 2",
+    "Off"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_fdrive",
+   "name": "SN Filter Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_lrate",
+   "name": "SN LFO Rate",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_lsync",
+   "name": "SN LFO Sync",
+   "options": [
+    "Free",
+    "4/1",
+    "2/1",
+    "1/1",
+    "1/2",
+    "1/3",
+    "1/4",
+    "1/6",
+    "1/8",
+    "1/12",
+    "1/16",
+    "1/32"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_lamt",
+   "name": "SN LFO Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_lwave",
+   "name": "SN LFO Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw Up",
+    "Saw Down",
+    "Square",
+    "Random",
+    "Exp Up",
+    "Exp Down"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_lretrig",
+   "name": "SN LFO Retrigger",
+   "options": [
+    "Off",
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_loffset",
+   "name": "SN LFO Phase",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_lvoice",
+   "name": "SN LFO Voice",
+   "options": [
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "sn_ldest",
+   "name": "SN LFO Dest",
+   "min": 0,
+   "max": 40,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 2.5,
+   "type": "stepper"
+  },
+  {
+   "key": "sn_ldest_prev",
+   "name": "SN Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "sn_ldest",
+   "step_delta": -1
+  },
+  {
+   "key": "sn_ldest_next",
+   "name": "SN Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "sn_ldest",
+   "step_delta": 1
+  },
+  {
+   "key": "sn_volume",
+   "name": "SN Volume",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_pan",
+   "name": "SN Pan",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_crush",
+   "name": "SN Sample Rate",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_drive",
+   "name": "SN Drive",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "sn_out",
+   "name": "SN Output",
+   "options": [
+    "Main",
+    "FX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_page",
+   "name": "CY Page",
+   "options": [
+    "OSC",
+    "AMP",
+    "MOD",
+    "METAL",
+    "CLICK",
+    "FILTER",
+    "LFO",
+    "MIX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_coarse",
+   "name": "CY Coarse",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_fine",
+   "name": "CY Fine",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_wave",
+   "name": "CY Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 4
+  },
+  {
+   "key": "cy_pwm",
+   "name": "CY PWM",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_attack",
+   "name": "CY Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_decay",
+   "name": "CY Decay",
+   "min": 0,
+   "max": 127,
+   "default": 107,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_repeat",
+   "name": "CY Repeat",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_slope",
+   "name": "CY Slope",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_veldest",
+   "name": "CY Velo Dest",
+   "options": [
+    "Off",
+    "Osc Coarse",
+    "Osc Fine",
+    "Osc Wave",
+    "Osc PWM",
+    "Amp Attack",
+    "Amp Decay",
+    "Amp Repeat",
+    "Amp Slope",
+    "Velo Dest",
+    "Velo Amount",
+    "Velo Volume",
+    "Mod 1 Pitch",
+    "Mod 2 Pitch",
+    "Mod 1 Gain",
+    "Mod 2 Gain",
+    "Mod 1 Wave",
+    "Mod 2 Wave",
+    "Click Wave",
+    "Click Level",
+    "Click Pitch",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Filter Type",
+    "Filter Drive",
+    "LFO Rate",
+    "LFO Sync",
+    "LFO Amount",
+    "LFO Wave",
+    "LFO Retrigger",
+    "LFO Phase",
+    "Mix Volume",
+    "Mix Pan",
+    "Sample Rate",
+    "Mix Drive",
+    "FX P1",
+    "FX P2",
+    "FX P3",
+    "FX P4"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_velamt",
+   "name": "CY Velo Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_velvol",
+   "name": "CY Velo Volume",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_m1pitch",
+   "name": "CY Mod 1 Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_m1gain",
+   "name": "CY Mod 1 Gain",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_m1wave",
+   "name": "CY Mod 1 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_m2pitch",
+   "name": "CY Mod 2 Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_m2gain",
+   "name": "CY Mod 2 Gain",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_m2wave",
+   "name": "CY Mod 2 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_twave",
+   "name": "CY Click Wave",
+   "options": [
+    "Snap",
+    "Offset",
+    "Click",
+    "Click 2",
+    "Tick",
+    "Kick",
+    "Rim",
+    "Drop",
+    "Hat",
+    "Clap",
+    "Kick 2",
+    "Snare",
+    "Tom",
+    "Snap 2"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_tlevel",
+   "name": "CY Click Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_tfreq",
+   "name": "CY Click Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_cutoff",
+   "name": "CY Cutoff",
+   "min": 0,
+   "max": 127,
+   "default": 68,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_reso",
+   "name": "CY Resonance",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_ftype",
+   "name": "CY Filter Type",
+   "options": [
+    "Low Pass",
+    "High Pass",
+    "Band Pass",
+    "Unity BP",
+    "Notch",
+    "Peak",
+    "Low Pass 2",
+    "Off"
+   ],
+   "default": 1
+  },
+  {
+   "key": "cy_fdrive",
+   "name": "CY Filter Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_lrate",
+   "name": "CY LFO Rate",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_lsync",
+   "name": "CY LFO Sync",
+   "options": [
+    "Free",
+    "4/1",
+    "2/1",
+    "1/1",
+    "1/2",
+    "1/3",
+    "1/4",
+    "1/6",
+    "1/8",
+    "1/12",
+    "1/16",
+    "1/32"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_lamt",
+   "name": "CY LFO Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_lwave",
+   "name": "CY LFO Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw Up",
+    "Saw Down",
+    "Square",
+    "Random",
+    "Exp Up",
+    "Exp Down"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_lretrig",
+   "name": "CY LFO Retrigger",
+   "options": [
+    "Off",
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_loffset",
+   "name": "CY LFO Phase",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_lvoice",
+   "name": "CY LFO Voice",
+   "options": [
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "cy_ldest",
+   "name": "CY LFO Dest",
+   "min": 0,
+   "max": 40,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 2.5,
+   "type": "stepper"
+  },
+  {
+   "key": "cy_ldest_prev",
+   "name": "CY Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "cy_ldest",
+   "step_delta": -1
+  },
+  {
+   "key": "cy_ldest_next",
+   "name": "CY Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "cy_ldest",
+   "step_delta": 1
+  },
+  {
+   "key": "cy_volume",
+   "name": "CY Volume",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_pan",
+   "name": "CY Pan",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_crush",
+   "name": "CY Sample Rate",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_drive",
+   "name": "CY Drive",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "cy_out",
+   "name": "CY Output",
+   "options": [
+    "Main",
+    "FX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_page",
+   "name": "HH Page",
+   "options": [
+    "OSC",
+    "AMP",
+    "MOD",
+    "METAL",
+    "CLICK",
+    "FILTER",
+    "LFO",
+    "MIX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_coarse",
+   "name": "HH Coarse",
+   "min": 0,
+   "max": 127,
+   "default": 50,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_fine",
+   "name": "HH Fine",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_wave",
+   "name": "HH Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_pwm",
+   "name": "HH PWM",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_attack",
+   "name": "HH Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_cdecay",
+   "name": "HH Closed Decay",
+   "min": 0,
+   "max": 127,
+   "default": 5,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_odecay",
+   "name": "HH Open Decay",
+   "min": 0,
+   "max": 127,
+   "default": 17,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_slope",
+   "name": "HH Slope",
+   "min": 0,
+   "max": 127,
+   "default": 6,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_veldest",
+   "name": "HH Velo Dest",
+   "options": [
+    "Off",
+    "Osc Coarse",
+    "Osc Fine",
+    "Osc Wave",
+    "Osc PWM",
+    "Amp Attack",
+    "Closed Decay",
+    "Open Decay",
+    "Amp Slope",
+    "Velo Dest",
+    "Velo Amount",
+    "Velo Volume",
+    "Mod 1 Pitch",
+    "Mod 2 Pitch",
+    "Mod 1 Gain",
+    "Mod 2 Gain",
+    "Mod 1 Wave",
+    "Mod 2 Wave",
+    "Click Wave",
+    "Click Level",
+    "Click Pitch",
+    "Filter Cutoff",
+    "Filter Resonance",
+    "Filter Type",
+    "Filter Drive",
+    "LFO Rate",
+    "LFO Sync",
+    "LFO Amount",
+    "LFO Wave",
+    "LFO Retrigger",
+    "LFO Phase",
+    "Mix Volume",
+    "Mix Pan",
+    "Sample Rate",
+    "Mix Drive",
+    "FX P1",
+    "FX P2",
+    "FX P3",
+    "FX P4"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_velamt",
+   "name": "HH Velo Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_velvol",
+   "name": "HH Velo Volume",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_m1pitch",
+   "name": "HH Mod 1 Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 56,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_m1gain",
+   "name": "HH Mod 1 Gain",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_m1wave",
+   "name": "HH Mod 1 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_m2pitch",
+   "name": "HH Mod 2 Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_m2gain",
+   "name": "HH Mod 2 Gain",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_m2wave",
+   "name": "HH Mod 2 Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_twave",
+   "name": "HH Click Wave",
+   "options": [
+    "Snap",
+    "Offset",
+    "Click",
+    "Click 2",
+    "Tick",
+    "Kick",
+    "Rim",
+    "Drop",
+    "Hat",
+    "Clap",
+    "Kick 2",
+    "Snare",
+    "Tom",
+    "Snap 2"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_tlevel",
+   "name": "HH Click Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_tfreq",
+   "name": "HH Click Pitch",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_cutoff",
+   "name": "HH Cutoff",
+   "min": 0,
+   "max": 127,
+   "default": 104,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_reso",
+   "name": "HH Resonance",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_ftype",
+   "name": "HH Filter Type",
+   "options": [
+    "Low Pass",
+    "High Pass",
+    "Band Pass",
+    "Unity BP",
+    "Notch",
+    "Peak",
+    "Low Pass 2",
+    "Off"
+   ],
+   "default": 1
+  },
+  {
+   "key": "hh_fdrive",
+   "name": "HH Filter Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_lrate",
+   "name": "HH LFO Rate",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_lsync",
+   "name": "HH LFO Sync",
+   "options": [
+    "Free",
+    "4/1",
+    "2/1",
+    "1/1",
+    "1/2",
+    "1/3",
+    "1/4",
+    "1/6",
+    "1/8",
+    "1/12",
+    "1/16",
+    "1/32"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_lamt",
+   "name": "HH LFO Amount",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_lwave",
+   "name": "HH LFO Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw Up",
+    "Saw Down",
+    "Square",
+    "Random",
+    "Exp Up",
+    "Exp Down"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_lretrig",
+   "name": "HH LFO Retrigger",
+   "options": [
+    "Off",
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_loffset",
+   "name": "HH LFO Phase",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_lvoice",
+   "name": "HH LFO Voice",
+   "options": [
+    "Drum 1",
+    "Drum 2",
+    "Drum 3",
+    "Snare",
+    "Cymbal",
+    "Hats"
+   ],
+   "default": 0
+  },
+  {
+   "key": "hh_ldest",
+   "name": "HH LFO Dest",
+   "min": 0,
+   "max": 40,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 2.5,
+   "type": "stepper"
+  },
+  {
+   "key": "hh_ldest_prev",
+   "name": "HH Prev",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "hh_ldest",
+   "step_delta": -1
+  },
+  {
+   "key": "hh_ldest_next",
+   "name": "HH Next",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "step_of": "hh_ldest",
+   "step_delta": 1
+  },
+  {
+   "key": "hh_volume",
+   "name": "HH Volume",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_pan",
+   "name": "HH Pan",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_crush",
+   "name": "HH Sample Rate",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_drive",
+   "name": "HH Drive",
+   "min": 0,
+   "max": 127,
+   "default": 63,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "hh_out",
+   "name": "HH Output",
+   "options": [
+    "Main",
+    "FX"
+   ],
+   "default": 0
+  },
+  {
+   "key": "fx_type",
+   "name": "FX Type",
+   "options": [
+    "Off",
+    "Drive",
+    "Ring",
+    "Comp",
+    "Delay"
+   ],
+   "default": 0
+  },
+  {
+   "key": "fx_mix",
+   "name": "FX Mix",
+   "min": 0,
+   "max": 100,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 1
+  },
+  {
+   "key": "crush_all",
+   "name": "Sample Rate All",
+   "min": 0,
+   "max": 127,
+   "default": 127,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "volume",
+   "name": "Volume",
+   "min": -24,
+   "max": 6,
+   "default": 0,
+   "dynamic_display": true
+  },
+  {
+   "key": "fx_dist",
+   "name": "FX Drive Type",
+   "options": [
+    "Tube",
+    "Fold",
+    "Clip"
+   ],
+   "default": 0
+  },
+  {
+   "key": "fx_drv_drive",
+   "name": "FX Drive",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_drv_shape",
+   "name": "FX Shape",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_drv_tone",
+   "name": "FX Tone",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_drv_level",
+   "name": "FX Level",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_ringwave",
+   "name": "FX Ring Wave",
+   "options": [
+    "Sine",
+    "Triangle",
+    "Saw",
+    "Square",
+    "Noise",
+    "PWM"
+   ],
+   "default": 0
+  },
+  {
+   "key": "fx_ring_freq",
+   "name": "FX Ring Freq",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_ratio",
+   "name": "FX Ratio",
+   "options": [
+    "1:1",
+    "2:1",
+    "3:1",
+    "4:1",
+    "6:1",
+    "8:1"
+   ],
+   "default": 0
+  },
+  {
+   "key": "fx_cmp_attack",
+   "name": "FX Attack",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_cmp_release",
+   "name": "FX Release",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_cmp_thresh",
+   "name": "FX Threshold",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_cmp_gain",
+   "name": "FX Makeup",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_delaytype",
+   "name": "FX Delay Type",
+   "options": [
+    "Delay",
+    "Ping Pong"
+   ],
+   "default": 0
+  },
+  {
+   "key": "fx_dly_time",
+   "name": "FX Time",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_dly_range",
+   "name": "FX Range",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_dly_tone",
+   "name": "FX Tone",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "fx_dly_feedback",
+   "name": "FX Feedback",
+   "min": 0,
+   "max": 127,
+   "default": 0,
+   "display": "int",
+   "dynamic_display": true,
+   "nudge_pct": 0.7874015748031497
+  },
+  {
+   "key": "learn",
+   "name": "Pad Learn",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "pads_clear",
+   "name": "Clear Pads",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "init_kit",
+   "name": "Init Kit",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "pads_info",
+   "name": "Pads",
+   "min": 0,
+   "max": 1,
+   "display": "string",
+   "type": "readout"
+  }
+ ]
+}

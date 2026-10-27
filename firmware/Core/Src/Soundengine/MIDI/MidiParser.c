@@ -166,7 +166,13 @@ void midiParser_ccHandler(MidiMsg msg, uint8_t updateOriginalValue, uint8_t isFl
 
 		const uint16_t paramNr = msg.data1-1;
 		if(updateOriginalValue && !isFloatModulator) {
+#ifdef VOLTKIT
+			// VOLTKIT (modified): CC 0 made paramNr+1 65536, writing far past
+			// this 255-byte array; the slot it means is 0.
+			midiParser_originalCcValues[(uint8_t)(paramNr+1)] = value.itg;
+#else
 			midiParser_originalCcValues[paramNr+1] = value.itg;
+#endif
 		}
 
 		switch(msg.data1)

@@ -19,6 +19,23 @@
 #include "Soundengine/MIDI/MidiNoteNumbers.h"
 #include "Soundengine/Sequencer/sequencer.h"
 
+// VOLTKIT (modified): float to unsigned as the Cortex-M7 converts it
+// (negative -> 0), which C leaves undefined.
+#ifdef VOLTKIT
+#define VOLT_F2U(x) volt_f2u(x)
+#else
+#define VOLT_F2U(x) ((uint32_t)(x))
+#endif
+
+// VOLTKIT (modified): the interpolating oscillators read one entry past
+// each 1024-entry table for the last step (the next table's first entry,
+// or past the end on the last table); VT_IDX wraps it within the table.
+#ifdef VOLTKIT
+#define VT_IDX(i) ((i) & 1023)
+#else
+#define VT_IDX(i) (i)
+#endif
+
 static __inline uint32_t freq2PhaseIncr(const float f) //4096
 {
 	return (((TABLESIZE*f)/REAL_FS))*1048576 ; // 1048576 <-> (<<20)
@@ -114,7 +131,7 @@ IN_ITCM_RAM void calcFmSineBlock(OscInfo* osc, int16_t* modBuffer, int16_t* buf,
 		const uint32_t oscPhase = osc->phase;
 		int16_t oscOut ;
 
-		const uint32_t index =  oscPhase + (((uint32_t)(modBuffer[i]*osc->fmMod))<<17);
+		const uint32_t index =  oscPhase + ((VOLT_F2U(modBuffer[i]*osc->fmMod))<<17);
 		uint32_t  itg	= index>>20;
 
 	#if INTERPOLATE_FM_OSC
@@ -162,7 +179,7 @@ IN_ITCM_RAM void calcFmBlock(OscInfo* osc, const int16_t table[][1024], int16_t*
 	{
 		const uint32_t oscPhase = osc->phase;
 		int16_t oscOut ;
-		const uint32_t index =  oscPhase + (((uint32_t)(modBuffer[i]*osc->fmMod))<<19);
+		const uint32_t index =  oscPhase + ((VOLT_F2U(modBuffer[i]*osc->fmMod))<<19);
 
 		uint32_t  itg	= index>>22; //10 bit index, 22 bit fractional part
 
@@ -171,7 +188,7 @@ IN_ITCM_RAM void calcFmBlock(OscInfo* osc, const int16_t table[][1024], int16_t*
 		//const float frac	= (index&0x003FFFFF)*2.38418579101562e-07f;
 		//oscOut += frac*(table[osc->tableOffset][itg] - oscOut);
 		uint32_t frac = index & 0x3FFFFF;
-		oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][itg] - oscOut) * frac)   >>22);
+		oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][VT_IDX(itg)] - oscOut) * frac)   >>22);
 
 	#else
 		oscOut = table[overtoneIndex][itg];
@@ -190,7 +207,7 @@ void calcPwmFmBlock(OscInfo* osc, int16_t* modBuffer, int16_t* buf, uint8_t size
 	{
 		const uint32_t oscPhase = osc->phase;
 		int16_t oscOut ;
-		const uint32_t index =  oscPhase + (((uint32_t)(modBuffer[i]*osc->fmMod))<<19);
+		const uint32_t index =  oscPhase + ((VOLT_F2U(modBuffer[i]*osc->fmMod))<<19);
 		const uint32_t index2 = index + pwm * (UINT32_MAX/2);
 
 		 uint32_t  itg	 = index>>22;
@@ -201,13 +218,13 @@ void calcPwmFmBlock(OscInfo* osc, int16_t* modBuffer, int16_t* buf, uint8_t size
 		//const float frac	= (index&0x003FFFFF)*2.38418579101562e-07f;
 		//oscOut += frac*(sawTable[osc->tableOffset][itg] - oscOut);
 		uint32_t frac = index & 0x3FFFFF;
-		oscOut = oscOut + (int16_t)(((int64_t)(sawTable[osc->tableOffset][itg] - oscOut) * frac)   >>22);
+		oscOut = oscOut + (int16_t)(((int64_t)(sawTable[osc->tableOffset][VT_IDX(itg)] - oscOut) * frac)   >>22);
 
 		int16_t osc2Out = sawTable[osc->tableOffset][itg2++];// * -1;
 		//const float frac	= (index&0x003FFFFF)*2.38418579101562e-07f;
 		frac = index2 & 0x3FFFFF;
 		//osc2Out += frac*(sawTable[osc->tableOffset][itg2] * -1 - osc2Out);
-		osc2Out = osc2Out + (int16_t)(((int64_t)(sawTable[osc->tableOffset][itg2] - osc2Out) * frac)   >>22);
+		osc2Out = osc2Out + (int16_t)(((int64_t)(sawTable[osc->tableOffset][VT_IDX(itg2)] - osc2Out) * frac)   >>22);
 
 		oscOut =  __QSUB16(oscOut,osc2Out);
 
@@ -237,7 +254,7 @@ int16_t calcFm(OscInfo* osc, OscInfo* modOsc, const int16_t table[][1024])
 	//const float frac	= (index&0x003FFFFF)*2.38418579101562e-07f;
 	//oscOut += frac*(table[osc->tableOffset][itg] - oscOut);
 	uint32_t frac = index & 0x3FFFFF;
-	oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][itg] - oscOut) * frac)   >>22);
+	oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][VT_IDX(itg)] - oscOut) * frac)   >>22);
 #else
 	oscOut = table[overtoneIndex][itg];
 #endif
@@ -342,12 +359,21 @@ IN_ITCM_RAM void calcNoiseBlock(OscInfo* osc, int16_t* buf, const uint8_t size ,
 //-----------------------------------------------------------
 int16_t calcNoise(OscInfo* osc)
 {
+#ifdef VOLTKIT
+	// VOLTKIT (modified): the original read the Cortex-M overflow flag right
+	// after the add; this computes the same signed-overflow test in C.
+	const uint32_t oldPhase = osc->phase;
+	osc->phase += osc->phaseInc;
+	const int overflow = (int32_t)((oldPhase ^ osc->phase) & (osc->phaseInc ^ osc->phase)) < 0;
+	if(overflow ||  (osc->phase == osc->phaseInc))
+#else
 	osc->phase += osc->phaseInc;
 
 	//check overflow flag, ( if osc->phase == osc->phaseInc a reset occured ==> retrigger, too
 	APSR_Type apsr;
 	apsr.w = __get_APSR();
 	if(apsr.b.V ||  (osc->phase == osc->phaseInc))
+#endif
 	{
 		//overflow happened -> phaseWrapped
 
@@ -461,7 +487,7 @@ IN_ITCM_RAM void calcWavetableOscBlock(OscInfo* osc, const int16_t table[][1024]
 			//const float frac = (itg&0x003FFFFF)*2.38418579101562e-07f; //2.38... => 1.f/0x3fffff
 			//oscOut += frac*(table[osc->tableOffset][itg] - oscOut);
 			uint32_t frac = oscPhase & 0x3FFFFF;
-			oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][itg] - oscOut) * frac)   >>22);
+			oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][VT_IDX(itg)] - oscOut) * frac)   >>22);
 		#else
 			oscOut = table[osc->tableOffset][itg];
 		#endif
@@ -485,7 +511,7 @@ int16_t calcWavetableOsc(OscInfo* osc,  const int16_t table[][1024])
 	//const float frac = (itg&0x003FFFFF)*2.38418579101562e-07f; //2.38... => 1.f/0x3fffff
 	//oscOut += frac*(table[osc->tableOffset][itg] - oscOut);
 	uint32_t frac = oscPhase & 0x3FFFFF;
-	oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][itg] - oscOut) * frac)   >>22);
+	oscOut = oscOut + (int16_t)(((int64_t)(table[osc->tableOffset][VT_IDX(itg)] - oscOut) * frac)   >>22);
 #else
 	oscOut = table[osc->tableOffset][itg];
 #endif
@@ -506,7 +532,7 @@ void calcSampleOscFmBlock(OscInfo* osc,int16_t* modBuffer, int16_t* buf, uint8_t
 		const uint32_t oscPhase 	= osc->phase;
 		int16_t oscOut ;
 
-		const uint32_t index =  oscPhase + (((uint32_t)(modBuffer[i]*osc->fmMod))<<14);
+		const uint32_t index =  oscPhase + ((VOLT_F2U(modBuffer[i]*osc->fmMod))<<14);
 		uint32_t  itg	= index>>17;
 
 	#if INTERPOLATE_FM_OSC
@@ -567,7 +593,7 @@ void calcUserSampleOscFmBlock(OscInfo* osc,int16_t* modBuffer, int16_t* buf, uin
 		const uint32_t oscPhase 	= osc->phase;
 		int16_t oscOut ;
 
-		const uint32_t index =  oscPhase + (((uint32_t)(modBuffer[i]*osc->fmMod))<<14);
+		const uint32_t index =  oscPhase + ((VOLT_F2U(modBuffer[i]*osc->fmMod))<<14);
 		uint32_t  itg	= index>>17;
 
 	#if INTERPOLATE_FM_OSC
@@ -674,13 +700,13 @@ IN_ITCM_RAM void calcPwmBlock(OscInfo* osc, int16_t* buf, uint8_t size ,const fl
 			//const float frac = (itg&0x003FFFFF)*2.38418579101562e-07f;
 			//oscOut += frac*(sawTable[osc->tableOffset][itg] - oscOut);
 			uint32_t frac = oscPhase & 0x3FFFFF;
-			oscOut = oscOut + (int16_t)(((int64_t)(sawTable[osc->tableOffset][itg] - oscOut) * frac)   >>22);
+			oscOut = oscOut + (int16_t)(((int64_t)(sawTable[osc->tableOffset][VT_IDX(itg)] - oscOut) * frac)   >>22);
 
 			int16_t osc2Out = sawTable[osc->tableOffset][itg2++] ;//* -1;
 			//const float frac	= (index&0x003FFFFF)*2.38418579101562e-07f;
 			//osc2Out += frac*(sawTable[osc->tableOffset][itg2] * -1 - osc2Out);
 			frac = oscPhase2 & 0x3FFFFF;
-			osc2Out = osc2Out + (int16_t)(((int64_t)(sawTable[osc->tableOffset][itg2++] - osc2Out) * frac)   >>22);
+			osc2Out = osc2Out + (int16_t)(((int64_t)(sawTable[osc->tableOffset][VT_IDX(itg2++)] - osc2Out) * frac)   >>22);
 
 			oscOut =  __QSUB16(oscOut,osc2Out);
 

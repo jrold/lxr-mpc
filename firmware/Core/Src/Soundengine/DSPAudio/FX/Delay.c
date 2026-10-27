@@ -96,6 +96,15 @@ void Delay_processPingPong(Delay *d, int16_t *fxBuffer,int16_t* outL, int16_t* o
 	int32_t x;
 	int32_t* stereoOut = (int32_t*)outL;
 
+#ifdef VOLTKIT
+	// VOLTKIT (modified): after a switch from the plain delay the positions
+	// can still span the whole buffer; ping-pong uses each half, so keep
+	// them there (otherwise halfsize + write writes past the buffer).
+	d->write &= FX_BUFFER_SIZE>>1;
+	d->oldRead &= FX_BUFFER_SIZE>>1;
+	d->newRead &= FX_BUFFER_SIZE>>1;
+#endif
+
 	for(uint8_t i=0;i<size;i++)
 	{
 
