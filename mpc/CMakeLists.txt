@@ -9,8 +9,8 @@ cmake_minimum_required(VERSION 3.22)
 #   MPC_WRAPPER_SOURCE  vst2_wrap.c to build (build.sh passes a copy that also
 #                       tells the engine about MPC's STOP)
 #
-# Two libraries: voltkit-engine (the LXR firmware's sound engine, loaded once
-# per instance, see EngineLoader.h) and the plug-in itself.
+# Two libraries: voltkit-engine (the whole LXR-02 firmware on its virtual
+# board, loaded once per instance, see EngineLoader.h) and the plug-in itself.
 
 project(voltkit_mpc VERSION 0.1.0 LANGUAGES C CXX)
 
@@ -30,32 +30,74 @@ endif()
 set(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(FW "${ROOT}/firmware/Core")
 
-# ---- the engine: the firmware's sound code, compiled as it is (see engine/)
-file(GLOB FW_DSP "${FW}/Src/Soundengine/DSPAudio/*.c"
-                 "${FW}/Src/Soundengine/DSPAudio/FX/*.c"
-                 "${FW}/Src/Soundengine/DSPAudio/FX/VerbTools/*.c")
+# ---- the engine: the whole LXR V2 firmware on the virtual board
+# (engine/volt_machine.h). The firmware's own sources, compiled unmodified but
+# for the VOLTKIT changes; platform/ stands in for the STM32 and its HAL.
+set(FWR "${ROOT}/firmware")
+set(PLAT "${ROOT}/platform")
+set(FW_SOURCES
+    Core/Src/main.c Core/Src/stm32f7xx_it.c Core/Src/stm32f7xx_hal_msp.c Core/Src/system_stm32f7xx.c Core/Src/flash_if.c
+    Core/Src/IO/adcPots.c Core/Src/IO/DIO.c Core/Src/IO/uart.c
+    Core/Src/lcd.c Core/Src/encoder.c Core/Src/buttonHandler.c Core/Src/ledHandler.c Core/Src/graphic.c
+    Core/Src/frontPanelParser.c Core/Src/Parameters.c
+    Core/Src/menu/Cc2Text.c Core/Src/menu/copyClearTools.c Core/Src/menu/menu.c Core/Src/menu/screensaver.c
+    Core/Src/Preset/initKit.c Core/Src/Preset/presetManager.c
+    Core/Src/Soundengine/AudioCodecManager.c Core/Src/Soundengine/cs4344_cs5343.c Core/Src/Soundengine/FIFO.c
+    Core/Src/Soundengine/FxBus.c Core/Src/Soundengine/Soundengine.c Core/Src/Soundengine/TriggerOut.c
+    Core/Src/Soundengine/USB/usb_manager.c
+    Middlewares/Third_Party/FatFs/src/diskio.c Middlewares/Third_Party/FatFs/src/ff.c
+    Middlewares/Third_Party/FatFs/src/ff_gen_drv.c Middlewares/Third_Party/FatFs/src/option/syscall.c
+    FATFS/App/fatfs.c FATFS/Target/bsp_driver_sd.c FATFS/Target/fatfs_platform.c FATFS/Target/sd_diskio.c
+    Middlewares/JS/STM32_USB_Device_Library/Core/Src/usbd_core.c
+    Middlewares/JS/STM32_USB_Device_Library/Core/Src/usbd_ctlreq.c
+    Middlewares/JS/STM32_USB_Device_Library/Core/Src/usbd_ioreq.c
+    Middlewares/JS/STM32_USB_Device_Library/Class/CDC/Src/usbd_cdc.c
+    USB_DEVICE_MIDI/App/usb_device.c USB_DEVICE_MIDI/App/usbd_cdc_if.c USB_DEVICE_MIDI/App/usbd_desc.c
+    USB_DEVICE_MIDI/Target/usbd_conf.c)
+file(GLOB FW_GLOBBED RELATIVE "${FWR}"
+    "${FWR}/Core/Src/Soundengine/DSPAudio/*.c" "${FWR}/Core/Src/Soundengine/DSPAudio/FX/*.c"
+    "${FWR}/Core/Src/Soundengine/DSPAudio/FX/VerbTools/*.c" "${FWR}/Core/Src/Soundengine/MIDI/*.c"
+    "${FWR}/Core/Src/Soundengine/Sequencer/*.c")
+list(APPEND FW_SOURCES ${FW_GLOBBED})
+list(TRANSFORM FW_SOURCES PREPEND "${FWR}/")
+
+# the peripheral and core-peripheral remaps, generated from ST's and ARM's headers
+set(GEN "${CMAKE_BINARY_DIR}/gen")
+file(MAKE_DIRECTORY "${GEN}")
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+execute_process(COMMAND ${Python3_EXECUTABLE} -I "${PLAT}/tools/gen-remap.py"
+                    "${FWR}/Drivers/CMSIS/Device/ST/STM32F7xx/Include/stm32f765xx.h" "${GEN}/lxr_remap.h" "${GEN}/lxr_remap.c"
+                COMMAND_ERROR_IS_FATAL ANY OUTPUT_QUIET)
+execute_process(COMMAND ${Python3_EXECUTABLE} -I "${PLAT}/tools/gen-core-portable.py" "${FWR}/Drivers/CMSIS/Include" "${GEN}"
+                COMMAND_ERROR_IS_FATAL ANY OUTPUT_QUIET)
+configure_file("${PLAT}/portable/lxr_intrinsics.h" "${GEN}/lxr_intrinsics.h" COPYONLY)
+
 add_library(voltkit_engine SHARED
-    ${FW_DSP}
-    ${FW}/Src/Soundengine/FxBus.c
-    ${FW}/Src/Soundengine/MIDI/MidiParser.c
-    ${FW}/Src/Soundengine/MIDI/MidiVoiceControl.c
-    ${FW}/Src/Soundengine/MIDI/ParameterArray.c
-    ${FW}/Src/Soundengine/MIDI/MidiMessages.c
-    ${FW}/Src/menu/Cc2Text.c
-    ${FW}/Src/Parameters.c
-    ${FW}/Src/Preset/initKit.c
-    ${ROOT}/engine/volt_engine.c
-    ${ROOT}/engine/firmware_stubs.c
-)
-target_compile_definitions(voltkit_engine PRIVATE VOLTKIT)
-# the shim first: it stands in for the STM32 HAL headers
-target_include_directories(voltkit_engine PRIVATE ${ROOT}/engine/shim ${FW}/Inc)
-# -w: the firmware's own warnings are upstream's; -O3 as the firmware builds.
-# -fno-strict-float-cast-overflow: the firmware converts out-of-range floats
-# to integers in many places and relies on the Cortex-M7 saturating them;
-# this makes the compiler do the same (aarch64's own conversion saturates).
-# -fwrapv likewise for its signed shifts and wrap-arounds.
-target_compile_options(voltkit_engine PRIVATE -O3 -w -ffp-contract=off -fno-strict-float-cast-overflow -fwrapv)
+    ${FW_SOURCES}
+    ${PLAT}/vboard.c ${PLAT}/hal.c ${PLAT}/hal_unused.c
+    ${GEN}/lxr_remap.c ${GEN}/lxr_core_objects.c)
+target_compile_definitions(voltkit_engine PRIVATE VOLTKIT STM32F765xx USE_HAL_DRIVER DWT_STM32_DELAY_H)
+set_source_files_properties(${FWR}/Core/Src/main.c PROPERTIES COMPILE_DEFINITIONS
+    "main=lxr_firmware_main;_itcm_text_end=_itcm_text_start;FIRMWARE_VERSION=\" 1.7\"")
+# the generated headers and the shims first: they stand in for the STM32's
+target_include_directories(voltkit_engine PRIVATE
+    "${GEN}" "${PLAT}/shim" "${PLAT}" "${ROOT}/engine" "${FWR}/Core/Inc"
+    "${FWR}/Drivers/STM32F7xx_HAL_Driver/Inc" "${FWR}/Drivers/STM32F7xx_HAL_Driver/Inc/Legacy"
+    "${FWR}/Drivers/CMSIS/Device/ST/STM32F7xx/Include" "${FWR}/Drivers/CMSIS/Include"
+    "${FWR}/Middlewares/Third_Party/FatFs/src" "${FWR}/FATFS/App" "${FWR}/FATFS/Target"
+    "${FWR}/Middlewares/JS/STM32_USB_Device_Library/Core/Inc" "${FWR}/Middlewares/JS/STM32_USB_Device_Library/Class/CDC/Inc"
+    "${FWR}/USB_DEVICE_MIDI/App" "${FWR}/USB_DEVICE_MIDI/Target")
+# -w: the firmware's own warnings are upstream's. Its flags (-O3, fast math),
+# the ARM GCC ABI's unsigned char and short enums, and, as the STM32 does,
+# saturating float-to-integer conversions (-fno-strict-float-cast-overflow)
+# and wrapping signed arithmetic (-fwrapv).
+target_compile_options(voltkit_engine PRIVATE -std=gnu11 -O3 -w -ffast-math -freciprocal-math -fomit-frame-pointer
+    -funsigned-char -fshort-enums -fno-strict-float-cast-overflow -fwrapv)
+if(APPLE)
+    # Apple's clang defines __weak (Objective-C); the HAL's own __weak must win.
+    target_compile_options(voltkit_engine PRIVATE -U__weak -Wno-deprecated-declarations
+        -include "${PLAT}/portable/volt_no_sections.h")
+endif()
 set_target_properties(voltkit_engine PROPERTIES
     PREFIX ""
     OUTPUT_NAME "voltkit-engine"
@@ -69,8 +111,12 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         -s)
 elseif(APPLE)
     set_target_properties(voltkit_engine PROPERTIES PREFIX "lib" SUFFIX ".dylib")
-
 endif()
+
+# the machine test links the engine's objects directly (no copy per instance)
+add_executable(voltkit-machine-test ../test/MachineTest.c)
+target_include_directories(voltkit-machine-test PRIVATE "${ROOT}/engine")
+target_link_libraries(voltkit-machine-test PRIVATE voltkit_engine m)
 
 # ---- the adapter
 add_library(voltkit_adapter STATIC VoltkitMpc.cpp EngineLoader.cpp)
@@ -79,16 +125,6 @@ target_compile_options(voltkit_adapter PRIVATE -Wall -Wextra)
 set_target_properties(voltkit_adapter PROPERTIES C_VISIBILITY_PRESET hidden CXX_VISIBILITY_PRESET hidden)
 find_package(Threads REQUIRED)
 target_link_libraries(voltkit_adapter PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
-
-add_executable(voltkit-mpc-test ../test/EngineTest.cpp)
-target_link_libraries(voltkit-mpc-test PRIVATE voltkit_adapter)
-add_dependencies(voltkit-mpc-test voltkit_engine)
-target_compile_definitions(voltkit-mpc-test PRIVATE VOLTKIT_TEST_ENGINE="$<TARGET_FILE:voltkit_engine>")
-
-add_executable(voltkit-fuzz ../test/Fuzz.c)
-target_link_libraries(voltkit-fuzz PRIVATE ${CMAKE_DL_LIBS} m)
-add_dependencies(voltkit-fuzz voltkit_engine)
-target_compile_definitions(voltkit-fuzz PRIVATE VOLTKIT_TEST_ENGINE="$<TARGET_FILE:voltkit_engine>")
 
 if(MPC_PARAMS_DIR)
     if(NOT MPC_WRAPPER_SOURCE)
