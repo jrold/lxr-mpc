@@ -252,7 +252,7 @@ def key(w, h, label, lit, led=True, size=None):
     if label:
         px = size or min(30, h * 0.40)
         f = font(px, bold=True)
-        while d.textlength(label, font=f) > bw - 46 * SS and px > 12:
+        while d.textlength(label, font=f) > bw - (46 if led else 12) * SS and px > 12:
             px -= 1
             f = font(px, bold=True)
         ty = (box[1] + box[3]) / 2
@@ -382,3 +382,168 @@ def knob_strip(frame, frames):
         fr.alpha_composite(light)
         out.paste(fr, (0, i * s))
     return out.resize((frame, frame * frames), Image.Resampling.LANCZOS)
+
+
+# ---------------------------------------------------------------- the LXR panel
+
+LCD_GLASS = (3, 14, 20)       # the display's backlit glass
+LCD_GHOST = (10, 34, 46)      # an unlit dot
+LCD_DOT = (138, 232, 255)     # a lit dot
+LED_OFF = (14, 40, 54)
+
+
+def lcd_window(img, box):
+    """The display's window: a black bezel round backlit glass (the cells'
+    strips draw their dots on it)."""
+    x0, y0, x1, y1 = (int(v * SS) for v in box)
+    d = ImageDraw.Draw(img)
+    img.alpha_composite(shadow(img.size, (x0, y0 + 3 * SS, x1, y1 + 6 * SS), 10 * SS, 6 * SS, 0.6))
+    d.rounded_rectangle((x0, y0, x1, y1), 10 * SS, fill=(8, 8, 9, 255))
+    g = 12 * SS
+    d.rounded_rectangle((x0 + g, y0 + g, x1 - g, y1 - g), 4 * SS, fill=LCD_GLASS + (255,))
+    img.alpha_composite(glow(img.size, (x0 + 60 * SS, y0 + g, x1 - 60 * SS, y1 - g), (14, 70, 96), 30 * SS, 0.30, radius=4 * SS))
+    d.rounded_rectangle((x0 + g, y0 + g, x1 - g, y1 - g), 4 * SS, outline=(0, 0, 0, 255), width=2 * SS)
+    d.line((x0 + 14 * SS, y1 - 2 * SS, x1 - 14 * SS, y1 - 2 * SS), fill=(255, 255, 255, 40), width=SS)
+
+
+def lcd_strip(cell, frames, glyph, pitch=5, dot=4):
+    """A display cell's filmstrip: frame n is character n (glyph(n) -> 8 rows
+    of 5 dots), lit dots glowing over the unlit grid, on transparent ground
+    (the glass is on the page)."""
+    s = cell * SS
+    gw, gh = 5 * pitch * SS, 8 * pitch * SS
+    ox, oy = (s - gw) // 2, (s - gh) // 2
+    out = Image.new("RGBA", (s, s * frames), (0, 0, 0, 0))
+    for n in range(frames):
+        fr = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        lit = Image.new("RGBA", (s, s), LCD_DOT + (0,))
+        d, dl = ImageDraw.Draw(fr), ImageDraw.Draw(lit)
+        for r, row in enumerate(glyph(n)):
+            for c, on in enumerate(row):
+                x, y = ox + c * pitch * SS, oy + r * pitch * SS
+                box = (x, y, x + dot * SS - 1, y + dot * SS - 1)
+                d.rectangle(box, fill=(LCD_DOT if on else LCD_GHOST) + (255,))
+                if on:
+                    dl.rectangle(box, fill=LCD_DOT + (255,))
+        halo = lit.getchannel("A").filter(ImageFilter.GaussianBlur(2 * SS)).point(lambda v: int(v * 0.45))
+        lit.putalpha(halo)
+        glowed = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        glowed.alpha_composite(lit)
+        glowed.alpha_composite(fr)
+        out.paste(glowed, (0, n * s))
+    return out.resize((cell, cell * frames), Image.Resampling.LANCZOS)
+
+
+def led_strip(size, frames):
+    """A key's LED: dark in the first half of the strip, lit cyan with a glow
+    in the second (the engine reports 0 or 1)."""
+    s = size * SS
+    c, r = s / 2, size * 0.26 * SS
+    out = Image.new("RGBA", (s, s * frames), (0, 0, 0, 0))
+    for lit in (False, True):
+        fr = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        if lit:
+            fr.alpha_composite(glow((s, s), (c - r * 1.3, c - r * 1.3, c + r * 1.3, c + r * 1.3), AMBER, 3 * SS, 0.9, True))
+        d = ImageDraw.Draw(fr)
+        d.ellipse((c - r - SS, c - r - SS, c + r + SS, c + r + SS), fill=(4, 4, 5, 255))
+        body = vertical(int(2 * r), int(2 * r), [(0, AMBER_HI), (0.5, AMBER), (1, AMBER_DEEP)] if lit
+                        else [(0, (30, 62, 78)), (1, LED_OFF)])
+        m = Image.new("L", body.size, 0)
+        ImageDraw.Draw(m).ellipse((0, 0, body.width - 1, body.height - 1), fill=255)
+        fr.paste(body, (int(c - r), int(c - r)), m)
+        for n in range(frames // 2, frames) if lit else range(frames // 2):
+            out.paste(fr, (0, n * s))
+    return out.resize((size, size * frames), Image.Resampling.LANCZOS)
+
+
+def endless_strip(frame, frames):
+    """An endless knob's filmstrip: no scale or arc, the cap turning a full
+    circle across the strip with its pointer up at the middle frame (where
+    the knob rests between turns)."""
+    s = frame * SS
+    c = s / 2
+    rk = c - 6 * SS
+    rf = rk - 6 * SS
+    cap = knob_cap(s, c, rk, rf)
+    light = knob_light(s, c, rk)
+    out = Image.new("RGBA", (s, s * frames), (0, 0, 0, 0))
+    for i in range(frames):
+        a = (i / (frames - 1) - 0.5) * 2 * math.pi
+        fr = Image.new("RGBA", (s, s), (0, 0, 0, 0))
+        fr.alpha_composite(cap.rotate(-math.degrees(a), resample=Image.Resampling.BICUBIC, center=(c, c)))
+        fr.alpha_composite(light)
+        out.paste(fr, (0, i * s))
+    return out.resize((frame, frame * frames), Image.Resampling.LANCZOS)
+
+
+def knob_well(img, cx, cy, frame):
+    """The recess an endless knob sits in: its shadow and a dark ring."""
+    cx, cy = cx * SS, cy * SS
+    rb = frame * 0.46 * SS
+    img.alpha_composite(shadow(img.size, (cx - rb, cy - rb + 5 * SS, cx + rb, cy + rb + 11 * SS), 0, 8 * SS, 0.9, True))
+    d = ImageDraw.Draw(img)
+    r0 = (frame / 2 + 2) * SS
+    d.ellipse((cx - r0, cy - r0, cx + r0, cy + r0), outline=(8, 8, 9, 255), width=3 * SS)
+    d.ellipse((cx - r0 - 3 * SS, cy - r0 - 3 * SS, cx + r0 + 3 * SS, cy + r0 + 3 * SS), outline=AMBER_DIM + (200,), width=SS)
+
+
+# ---------------------------------------------------------------- faders
+
+FADER_CAP_H = 30
+
+
+def fader_base(img, cx, cy, h):
+    """What sits round a fader on the panel: a scale of ticks either side
+    (0..10, the ends and middle longer and cyan)."""
+    cx, top = cx * SS, (cy - h / 2) * SS
+    d = ImageDraw.Draw(img)
+    travel = (h - FADER_CAP_H) * SS
+    y0 = top + FADER_CAP_H * SS / 2
+    for i in range(11):
+        y = y0 + travel * (1 - i / 10)
+        long_ = i in (0, 5, 10)
+        for side in (-1, 1):
+            x0 = cx + side * 32 * SS
+            x1 = x0 + side * (9 if long_ else 5) * SS
+            d.line((x0, y, x1, y), fill=(AMBER if long_ else (112, 120, 128)) + (255,), width=int(1.4 * SS))
+
+
+def fader_strip(w, h, frames):
+    """The fader filmstrip, frames of w x h stacked top to bottom: a black
+    slot lit cyan below the cap, and a gunmetal cap with grip lines and a
+    cyan pointer line. Frame 0 is the bottom of the travel."""
+    s_w, s_h = w * SS, h * SS
+    cap_h = FADER_CAP_H * SS
+    slot_w = 8 * SS
+    cx = s_w / 2
+    travel = s_h - cap_h
+
+    base = Image.new("RGBA", (s_w, s_h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(base)
+    d.rounded_rectangle((cx - slot_w / 2 - SS, cap_h / 2 - 2 * SS, cx + slot_w / 2 + SS, s_h - cap_h / 2 + 2 * SS),
+                        slot_w / 2, fill=(40, 43, 48, 255))
+    d.rounded_rectangle((cx - slot_w / 2, cap_h / 2 - SS, cx + slot_w / 2, s_h - cap_h / 2 + SS), slot_w / 2,
+                        fill=(6, 7, 8, 255))
+
+    cap_w = s_w - 6 * SS
+    cap = Image.new("RGBA", (cap_w, cap_h), (0, 0, 0, 0))
+    body = vertical(cap_w, cap_h, [(0, (112, 118, 126)), (0.45, (70, 74, 81)), (0.55, (44, 47, 52)), (1, (78, 82, 88))])
+    cap.paste(body, (0, 0), rounded_mask(cap_w, cap_h, 4 * SS))
+    cd = ImageDraw.Draw(cap)
+    cd.rounded_rectangle((0, 0, cap_w - 1, cap_h - 1), 4 * SS, outline=(6, 6, 6, 255), width=SS)
+    for gy in (cap_h * 0.22, cap_h * 0.32, cap_h * 0.68, cap_h * 0.78):   # grip ridges
+        cd.line((5 * SS, gy, cap_w - 5 * SS, gy), fill=(138, 146, 156, 255), width=SS)
+    cd.line((3 * SS, cap_h / 2, cap_w - 3 * SS, cap_h / 2), fill=AMBER + (255,), width=int(2.5 * SS))
+
+    out = Image.new("RGBA", (s_w, s_h * frames), (0, 0, 0, 0))
+    for k in range(frames):
+        t = k / max(1, frames - 1)
+        fr = base.copy()
+        y = (1 - t) * travel   # the cap's top
+        if t > 0:
+            ImageDraw.Draw(fr).rounded_rectangle((cx - slot_w / 2 + SS, y + cap_h / 2, cx + slot_w / 2 - SS,
+                                                  s_h - cap_h / 2), slot_w / 2, fill=AMBER + (255,))
+        fr.alpha_composite(shadow(fr.size, (3 * SS, y + 3 * SS, s_w - 3 * SS, y + cap_h + 4 * SS), 4 * SS, 2 * SS, 0.6))
+        fr.alpha_composite(cap, (3 * SS, int(y)))
+        out.paste(fr, (0, k * s_h))
+    return out.resize((w, h * frames), Image.Resampling.LANCZOS)

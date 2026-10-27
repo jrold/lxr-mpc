@@ -83,10 +83,9 @@ set(CMAKE_RANLIB "$TC/zranlib")
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM NEVER)
 EOF
 
-# 3. VOLTKIT's controls (params.json, layout.conf, the adapter's tables) from
-#    gen_controls.py, then params.h, the touchscreen skin and the plug-in list
-#    entry (gen_vst.py)
-python3 "$HERE/gen_controls.py"
+# 3. VOLTKIT's panel (params.json, layout.conf) from gen_layout.py, then
+#    params.h, the touchscreen skin and the plug-in list entry (gen_vst.py)
+python3 "$HERE/gen_layout.py"
 if [ ! -x "$BUILD/venv/bin/python" ]; then
     python3 -m venv "$BUILD/venv"
     "$BUILD/venv/bin/pip" install --quiet pillow

@@ -3,10 +3,14 @@
 //
 // The panel's controls are parameters (mpc/gen_layout.py):
 //   btn_00..btn_40   the panel keys (the firmware's button numbers; 40 = PAGE DOWN):
-//                    a tap presses one and lets go after kTapFrames
+//                    a tap presses one and lets go after kTapFrames. Momentary:
+//                    they read 0 (their LEDs show the state), so every tap is a 1
 //   shift, hold      SHIFT latched; HOLD keeps the next key tapped held down
 //                    until it is tapped again (for the LXR's key combinations)
-//   knob1..knob4     the four endless knobs; enc the encoder, enc_push its push
+//   knob1..knob4     the four endless knobs; enc the encoder, enc_push its push.
+//                    Each move counts from the value last set, and once a knob
+//                    has rested kRecentreMs it reads 0.5 again: endless, under
+//                    a finger's drag or a Q-Link's clicks
 //   fader1..fader6   the six faders; master the output level
 //   sync             MIDI clock, start and stop from the MPC's transport (the
 //                    card's tempo is MID for it; off, set a tempo on the LXR)
@@ -59,6 +63,8 @@ constexpr int kLcdCells = 32;
 constexpr double kKnobDegreesPerUnit = 512.0;   // a Q-Link click (1/128) turns a knob 4 degrees
 constexpr double kKnobStep = 3.0;               // at most this many degrees per firmware block: each step registers
 constexpr double kEncoderDetentsPerUnit = 128.0;
+constexpr int kRecentreMs = 250;
+constexpr int kDials = 5;                       // knob1..knob4, enc
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 
 double parseDouble(const char* text, const double fallback)
@@ -203,20 +209,19 @@ public:
             holdNext = v != 0.0;
             return;
         }
-        if (const int i = numbered(k, "knob", 4); i >= 0)
+        if (const int d = dialIndex(k); d >= 0)
         {
-            knobs[static_cast<std::size_t>(i)].target += (v - 0.5) * kKnobDegreesPerUnit;
-            changed.insert(k);   // back to centre: the knob is endless
-            return;
-        }
-        if (k == "enc")
-        {
-            encoderRest += (v - 0.5) * kEncoderDetentsPerUnit;
-            const int detents = static_cast<int>(encoderRest);
-            encoderRest -= detents;
-            if (detents != 0 && machine)
-                machine->encoder(detents);
-            changed.insert(k);
+            const double moved = turn(d, v);
+            if (d < 4)
+                knobs[static_cast<std::size_t>(d)].target += moved * kKnobDegreesPerUnit;
+            else
+            {
+                encoderRest += moved * kEncoderDetentsPerUnit;
+                const int detents = static_cast<int>(encoderRest);
+                encoderRest -= detents;
+                if (detents != 0 && machine)
+                    machine->encoder(detents);
+            }
             return;
         }
         if (k == "enc_push")
@@ -249,18 +254,18 @@ public:
         const auto num = [&](const double x) { return writeText(buf, len, formatNum(x)); };
         if (k == "state")
             return writeText(buf, len, saveState());
-        if (const int b = indexed(k, "btn_", kButtons); b >= 0)
-            return num(down[static_cast<std::size_t>(b)] ? 1.0 : 0.0);
+        if (indexed(k, "btn_", kButtons) >= 0)
+            return num(0.0);
         if (const int l = indexed(k, "led_", kButtons); l >= 0)
             return num(ledOn(l) ? 1.0 : 0.0);
         if (const int c = indexed(k, "lcd_", kLcdCells); c >= 0)
-            return num(cellCode(c) / 127.0);
+            return num(cellCode(c));   // 0..127: the skin's character strip
         if (k == "shift")
             return num(down[kShiftButton] ? 1.0 : 0.0);
         if (k == "hold")
             return num(holdNext ? 1.0 : 0.0);
-        if (numbered(k, "knob", 4) >= 0 || k == "enc")
-            return num(0.5);
+        if (const int d = dialIndex(k); d >= 0)
+            return num(dials[static_cast<std::size_t>(d)].last);
         if (k == "enc_push")
             return num(0.0);
         if (const int i = numbered(k, "fader", VOLT_ADC_FADERS); i >= 0)
@@ -358,6 +363,16 @@ public:
                         changed.insert(indexedKey("led_", l));
             }
         }
+        const auto now = std::chrono::steady_clock::now();
+        for (int d = 0; d < kDials; ++d)
+        {
+            Dial& dial = dials[static_cast<std::size_t>(d)];
+            if (dial.resting || now - dial.lastSet < std::chrono::milliseconds(recentreMs))
+                continue;
+            dial.resting = true;
+            dial.last = 0.5;
+            changed.insert(dialKey(d));
+        }
         if (changed.empty())
             return false;
         const std::string k = *changed.begin();
@@ -382,6 +397,34 @@ private:
         int frame;
         std::uint8_t byte;
     };
+
+    struct Dial
+    {
+        double last = 0.5;   // the value the host last set (and reads back)
+        std::chrono::steady_clock::time_point lastSet {};
+        bool resting = true;
+    };
+
+    static int dialIndex(const std::string& key)
+    {
+        return key == "enc" ? 4 : numbered(key, "knob", 4);
+    }
+
+    static std::string dialKey(const int d)
+    {
+        return d == 4 ? std::string("enc") : "knob" + std::to_string(d + 1);
+    }
+
+    // How far a knob or the encoder moved since the value last set.
+    double turn(const int d, const double v)
+    {
+        Dial& dial = dials[static_cast<std::size_t>(d)];
+        const double moved = v - dial.last;
+        dial.last = v;
+        dial.lastSet = std::chrono::steady_clock::now();
+        dial.resting = false;
+        return moved;
+    }
 
     // A fresh engine copy with `card` on its SD card, booted.
     void start(const std::string& card)
@@ -434,10 +477,7 @@ private:
         for (int c = 0; c < kLcdCells; ++c)
             changed.insert(indexedKey("lcd_", c));
         for (int l = 0; l < kButtons; ++l)
-        {
             changed.insert(indexedKey("led_", l));
-            changed.insert(indexedKey("btn_", l));
-        }
         for (const char* k : { "shift", "hold", "sync", "master" })
             changed.insert(k);
         for (int i = 1; i <= VOLT_ADC_FADERS; ++i)
@@ -507,7 +547,8 @@ private:
         down[i] = isDown;
         if (machine)
             machine->button(b, isDown ? 1 : 0);
-        changed.insert(b == kShiftButton ? std::string("shift") : indexedKey("btn_", b));
+        if (b == kShiftButton)
+            changed.insert("shift");
     }
 
     bool bouncing(const std::string& key)
@@ -594,6 +635,7 @@ private:
     std::array<int, kButtons> releaseIn {};
     bool holdNext = false;
     std::array<Knob, 4> knobs {};
+    std::array<Dial, kDials> dials {};
     double encoderRest = 0.0;
     int encoderRelease = 0;
     std::array<double, VOLT_ADC_FADERS> faders { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
@@ -612,8 +654,9 @@ private:
 
     std::optional<std::chrono::steady_clock::time_point> lastSuspend;
     std::map<std::string, std::chrono::steady_clock::time_point> lastPress;
-    // VOLTKIT_DEBOUNCE_MS: the offline test turns it off to press keys quickly.
+    // VOLTKIT_DEBOUNCE_MS, VOLTKIT_RECENTRE_MS: the offline test turns them off.
     const int debounceMs = std::getenv("VOLTKIT_DEBOUNCE_MS") ? std::atoi(std::getenv("VOLTKIT_DEBOUNCE_MS")) : kDebounceMs;
+    const int recentreMs = std::getenv("VOLTKIT_RECENTRE_MS") ? std::atoi(std::getenv("VOLTKIT_RECENTRE_MS")) : kRecentreMs;
 };
 
 void* engineCreate(const char* dataDir)

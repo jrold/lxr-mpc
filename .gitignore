@@ -3,3 +3,4 @@ mpc/build/
 mpc/.mpc-vst-plugins/
 .DS_Store
 *.wav
+__pycache__/

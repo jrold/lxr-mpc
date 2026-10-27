@@ -2,20 +2,21 @@
 
     python3 skin/skin_post.py <skin dir>
 
-1. Big on/off keys. A layout `button` fires Toggle Switch twice per tap, so
-   on/off parameters are `toggle`s, and each one in KEYS becomes a key of
-   that size (its own definition with key images, keeping the toggle's
-   actions), placed around the toggle's centre.
-2. Cyan knob values (TUI.json label colour).
-3. The artwork, repainted as cyan-lit graphite hardware (hardware.py): the
-   page backgrounds, every voice page's own image (the `when=` mode images),
-   popup lists and their options, the page keys and other segments, the
-   stepper arrows and the knob filmstrip. Geometry and bindings stay as
-   generated.
+1. The display and the LEDs. Each display cell and each LED is a small knob
+   in the layout (gen_layout.py); here it loses its touch (a display-only
+   definition, just a filmstrip) and gets its strip: the display's 128
+   characters (dotfont.py), or an LED dark then lit.
+2. Big on/off keys. SHIFT, HOLD and MPC SYNC are `toggle`s (one flip per
+   tap); each becomes a key of its size, with its own definition and key
+   images, keeping the toggle's actions.
+3. The artwork, repainted as cyan-lit graphite hardware (hardware.py): both
+   pages' panels, every key's images, and the endless knobs' filmstrips.
+   Geometry and bindings stay as generated.
 
 Needs Pillow, the Titillium Web fonts build.sh copies to build/fonts/, and
-mpc-vst-plugins' tools (layout parser, control geometry) in $MPC_VST or
-mpc/.mpc-vst-plugins.
+mpc-vst-plugins' tools (layout parser) in $MPC_VST or mpc/.mpc-vst-plugins.
+
+Copyright (C) 2026 Jason Rold. GPL-3.0-only.
 """
 import copy
 import glob
@@ -28,18 +29,19 @@ from PIL import Image, ImageDraw
 SKIN_DIR = os.path.dirname(os.path.abspath(__file__))
 HERE = os.path.dirname(SKIN_DIR)   # mpc/
 sys.path.insert(0, SKIN_DIR)
+sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(os.environ.get("MPC_VST") or os.path.join(HERE, ".mpc-vst-plugins"), "tools"))
+import dotfont  # noqa: E402
+import gen_layout as gl  # noqa: E402
 import hardware as hw  # noqa: E402
 import shadow_skin  # noqa: E402
 
 W, H, Y_OFF = shadow_skin.W, shadow_skin.H, shadow_skin.Y_OFF
 SS = hw.SS
 TOGGLE_TOP = 18   # shadow_skin.py places a toggle at cy - 18
-
-# toggle key -> (caption, width, height)
-KEYS = {
-    "learn": ("PAD LEARN", 400, 90),
-}
+FRAMES = shadow_skin.FRAMES             # a knob strip's frames (MPC slices 128 square frames)
+NUM_FRAMES = shadow_skin.ROT_FRAMES     # what a knob definition says: value v shows frame round(v * 127)
+LED_SIZE = 2 * gl.LED_R + 10
 
 
 # ---------------------------------------------------------------- TUI.json
@@ -64,7 +66,7 @@ def find_defs(node):
 def placements(node, prefix):
     if isinstance(node, dict):
         cd = node.get("componentData")
-        if isinstance(cd, dict) and str(cd.get("type", "")).startswith(prefix):
+        if isinstance(cd, dict) and str(cd.get("type", "")).startswith(prefix) and "handle remapping" in node:
             yield node
         for v in node.values():
             yield from placements(v, prefix)
@@ -73,27 +75,31 @@ def placements(node, prefix):
             yield from placements(x, prefix)
 
 
+def param_of(placed, params):
+    remap = placed.get("handle remapping", {}).get("map") or []
+    return params[int(remap[0]["value"].split()[-1])]["key"] if remap else None
+
+
 def big_keys(tui, params, save):
     defs = find_defs(tui)
     by_name = {d["key"]: d for d in defs}
     done = set()
     for placed in list(placements(tui, "shToggle")):
-        index = int(placed["handle remapping"]["map"][0]["value"].split()[-1])
-        name = params[index]["key"]
-        if name not in KEYS:
+        name = param_of(placed, params)
+        if name not in gl.BIG_KEYS:
             continue
-        caption, w, h = KEYS[name]
+        caption, w, h = gl.BIG_KEYS[name]
         toggle = by_name[placed["componentData"]["type"]]
-        new_key = "vkKey_%s" % name
+        new_key = "sfKey_%s" % name
         if new_key not in by_name:
             for lit in (False, True):
-                save(hw.key(w, h, caption, lit), "vk_key_%s_%s.png" % (name, "on" if lit else "off"))
+                save(hw.key(w, h, caption, lit), "sf_key_%s_%s.png" % (name, "on" if lit else "off"))
             value = copy.deepcopy(toggle["value"])
             focus = next(c for c in value["componentsData"] if c["componentData"]["type"] == "Focus")
             button = next(c for c in value["componentsData"] if c["componentData"]["type"] == "Button")
             focus["bounds"]["bounds"] = "0 0 %d %d" % (w, h)
-            button["componentData"]["data"]["onImage"] = "vk_key_%s_on.png" % name
-            button["componentData"]["data"]["offImage"] = "vk_key_%s_off.png" % name
+            button["componentData"]["data"]["onImage"] = "sf_key_%s_on.png" % name
+            button["componentData"]["data"]["offImage"] = "sf_key_%s_off.png" % name
             button["bounds"]["bounds"] = "0 0 %d %d" % (w, h)
             value["componentsData"] = [focus, button]   # the caption is in the image
             entry = {"key": new_key, "value": value}
@@ -104,115 +110,128 @@ def big_keys(tui, params, save):
         placed["componentData"]["type"] = new_key
         placed["bounds"]["bounds"] = "%d %d %d %d" % (cx - w // 2, cy - h // 2, w, h)
         done.add(name)
-    missing = set(KEYS) - done
+    missing = set(gl.BIG_KEYS) - done
     if missing:
         sys.exit("skin_post: no toggle placed for %s" % ", ".join(sorted(missing)))
 
 
-# MPC slices a knob filmstrip as the generator's 128 square frames whatever
-# the skin says, and a Live III mis-sliced a 16384 px strip (PerkyBits at
-# r=59); r=54 (118 px frames, 15104 px) draws correctly. So keep 128 frames,
-# under 16384 px.
-def check_knob_strip(r, frame, frames):
-    if frames != 128 or frame * frames >= 16384:
-        sys.exit("skin_post: knob r=%d: a %d-frame, %d px strip won't slice right on MPC (keep r <= 58)"
-                 % (r, frame, frame * frames))
+def display_def(name, strip, size):
+    """A definition that only shows a filmstrip: no touch, no focus."""
+    return {"key": name, "value": {
+        "version": 4, "actions": [],
+        "backgroundData": {"version": 1, "focussed": {"version": 1, "colour": "0", "image": ""},
+                           "unfocussed": {"version": 1, "colour": "0", "image": ""}},
+        "ignoreMousePresses": True, "disableCoarseDataWheel": True, "repeats": 1, "hideQLinkBounds": True,
+        "componentsData": [{"version": 2, "componentData": {
+            "version": 1, "name": "Display", "type": "Knob",
+            "data": {"version": 5, "knobType": "FilmStrip", "filmStrip": strip,
+                     "numFrames": NUM_FRAMES, "invert": False, "dragOrientation": "Vertical", "handleName": "Data"}},
+            "handle remapping": {"version": 1, "map": []},
+            "bounds": {"version": 2, "acceptsHWFocus": "No", "showWhenDataModelInvalid": "Show",
+                       "whenVisible": "Always", "boundsType": "Absolute", "bounds": "0 0 %d %d" % (size, size),
+                       "additionalInvalidatingHandles": []}}]}}
 
 
-def cyan_knob_values(tui):
-    for d in find_defs(tui):
-        if not d["key"].startswith("shKnob"):
+def display_only(tui, params, save):
+    """The display cells and LEDs: display-only, centred where the layout put
+    their knobs."""
+    defs = find_defs(tui)
+    save(hw.lcd_strip(gl.LCD_CELL, FRAMES, dotfont.glyph), "sf_lcd.png")
+    save(hw.led_strip(LED_SIZE, FRAMES), "sf_led.png")
+    defs.append(display_def("sfLcd", "sf_lcd.png", gl.LCD_CELL))
+    defs.append(display_def("sfLed", "sf_led.png", LED_SIZE))
+    count = {"lcd_": 0, "led_": 0}
+    for placed in list(placements(tui, "shKnob")):
+        kind = (param_of(placed, params) or "")[:4]
+        if kind not in count:
             continue
-        labels = [c for c in d["value"]["componentsData"] if c["componentData"]["type"] == "Label"]
-        if len(labels) >= 2:   # name, then value
-            labels[-1]["componentData"]["data"]["textStyle"]["colour"] = "ff" + "%02x%02x%02x" % hw.AMBER
-            labels[0]["componentData"]["data"]["textStyle"]["colour"] = "ff" + "%02x%02x%02x" % hw.INK
+        size = gl.LCD_CELL if kind == "lcd_" else LED_SIZE
+        x, y, w, h = (int(v) for v in placed["bounds"]["bounds"].split())
+        cx, cy = x + w / 2, y + h / 2
+        placed["componentData"]["type"] = "sfLcd" if kind == "lcd_" else "sfLed"
+        placed["bounds"]["bounds"] = "%d %d %d %d" % (round(cx - size / 2), round(cy - size / 2), size, size)
+        placed["bounds"]["acceptsHWFocus"] = "No"
+        count[kind] += 1
+    if count != {"lcd_": 32, "led_": 41}:
+        sys.exit("skin_post: placed %d display cells and %d LEDs (want 32 and 41)" % (count["lcd_"], count["led_"]))
 
 
-# ---------------------------------------------------------------- artwork
+# ---------------------------------------------------------------- pages
 
-def option_labels(w, params):
-    if w.get("options"):
-        return w["options"]
-    for p in params:
-        if p["key"] == w["key"]:
-            return p.get("options", [])
-    return []
+def text(d, xy, s, px, fill, bold=True, spacing=0):
+    """Centred lettering with a drop shadow, at a layout position."""
+    f = hw.font(px, bold)
+    x, y = xy[0] * SS, (xy[1] - Y_OFF) * SS
+    if spacing:
+        width = sum(d.textlength(c, font=f) for c in s) + spacing * SS * (len(s) - 1)
+        hw.spaced(d, (x - width / 2, y + SS), s, f, (0, 0, 0, 170), spacing * SS)
+        hw.spaced(d, (x - width / 2, y), s, f, fill, spacing * SS)
+        return
+    d.text((x, y + SS), s, font=f, fill=(0, 0, 0, 170), anchor="mm")
+    d.text((x, y), s, font=f, fill=fill, anchor="mm")
 
 
-def caption(img, cx, y, text, size=19):
-    """A control's name, in light lettering above it (layout coordinates)."""
+def page_box(box):
+    """A layout-coordinate box on the page image."""
+    x0, y0, x1, y1 = box
+    return x0, y0 - Y_OFF, x1, y1 - Y_OFF
+
+
+def panel_page():
+    img = hw.plate(W, H)
+    hw.panel(img, page_box((12, 92, 1268, 348)))
+    hw.lcd_window(img, page_box(gl.LCD_BEZEL))
     d = ImageDraw.Draw(img)
-    f = hw.font(size, bold=True)
-    x = cx * SS - (d.textlength(text, font=f) + (len(text) - 1) * 2 * SS) / 2
-    hw.spaced(d, (x, (y - Y_OFF) * SS + 2 * SS), text, f, (0, 0, 0, 170), 2 * SS)
-    hw.spaced(d, (x, (y - Y_OFF) * SS), text, f, hw.INK_DIM + (255,), 2 * SS)
+    for i in range(4):
+        hw.knob_well(img, gl.knob_cx(i), gl.KNOB_CY - Y_OFF, 2 * gl.KNOB_R)
+        # a hairline from the display's column down to its knob
+        cx = gl.knob_cx(i) * SS
+        d.line((cx, (gl.LCD_BEZEL[3] - Y_OFF + 4) * SS, cx, (gl.KNOB_CY - gl.KNOB_R - 10 - Y_OFF) * SS),
+               fill=hw.AMBER_DIM + (255,), width=SS)
+    hw.knob_well(img, gl.ENC_CX, gl.ENC_CY - Y_OFF, 2 * gl.ENC_R)
+    d = ImageDraw.Draw(img)
+    text(d, (gl.ENC_CX, gl.ENC_CY + gl.ENC_R + 22), "DATA", 15, hw.INK_DIM + (255,), spacing=3)
+    text(d, (gl.ENC_CX, 302), "VOLTKIT", 34, hw.INK + (255,), spacing=6)
+    text(d, (gl.ENC_CX, 330), "DRUM COMPUTER", 13, hw.AMBER + (255,), spacing=4)
+
+    # the key rows, each on its strip (the LEDs sit in its top margin)
+    for name, (row, cy, h) in gl.ROWS.items():
+        top = cy - h // 2 - 2 * gl.LED_R - gl.LED_ABOVE - 2
+        bottom = cy + h // 2 + (34 if name == "steps" else 6)
+        hw.tray(img, page_box((gl.X0 - 10, top, gl.X1 + 10, bottom)), screws=False)
+    d = ImageDraw.Draw(img)
+    steps = gl.row_keys(gl.STEP_ROW, 0)
+    for (_, _, cx, _), label in zip(steps, gl.STEP_LABELS):
+        text(d, (cx, gl.STEP_LABEL_Y), label, 12, hw.INK_DIM + (255,), bold=False)
+    # SHIFT reads the step captions: a cyan rule under each group of four
+    for g in range(4):
+        x0 = steps[4 * g][2] - steps[4 * g][3] // 2
+        x1 = steps[4 * g + 3][2] + steps[4 * g + 3][3] // 2
+        y = (gl.STEP_LABEL_Y + 13 - Y_OFF) * SS
+        d.line((x0 * SS, y, x1 * SS, y), fill=hw.AMBER_DIM + (255,), width=SS)
+    return img.resize((W, H), Image.Resampling.LANCZOS)
 
 
-def draw_widgets(bg, widgets):
-    def box(x0, y0, x1, y1):
-        return (x0, y0 - Y_OFF, x1, y1 - Y_OFF)
-
-    for w in widgets:
-        if w["kind"] == "frame":
-            hw.panel(bg, box(w["x"], w["y"], w["x"] + w["w"], w["y"] + w["h"]), w.get("title"))
-    for w in widgets:
-        k = w["kind"]
-        if k == "readout":
-            hw.well(bg, box(w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["cx"] + w["w"] // 2, w["cy"] + w["h"] // 2))
-        elif k == "popup":
-            hw.well(bg, box(w["cx"] - w["w"] // 2, w["cy"] - w["h"] // 2, w["cx"] + w["w"] // 2, w["cy"] + w["h"] // 2))
-            if w.get("label"):
-                caption(bg, w["cx"], w["cy"] - w["h"] // 2 - 22, w["label"])
-        elif k == "stepper":
-            x0, h = w["cx"] - w["w"] // 2, w["h"]
-            hw.well(bg, box(x0 + h + 4, w["cy"] - h // 2, x0 + w["w"] - h - 4, w["cy"] + h // 2))
-            if w.get("label"):
-                caption(bg, w["cx"], w["cy"] - h // 2 - 22, w["label"])
-        elif k == "enum_h" and w.get("label"):
-            rs = shadow_skin.seg_rects(w)
-            caption(bg, w["cx"], min(r[1] for r in rs) - 22, w["label"])
-        elif k == "knob":
-            hw.knob_base(bg, w["cx"], w["cy"] - Y_OFF, 2 * w["r"] + 10)
-            # shadow_skin's knob: the strip (2r + 10 square), then the name, then
-            # the value label, centred frame/2 + 42 below the knob's centre.
-            vy = w["cy"] + (2 * w["r"] + 10) // 2 + 42
-            hw.well(bg, box(w["cx"] - 72, vy - 18, w["cx"] + 72, vy + 18), radius=5)
+def mix_page():
+    img = hw.plate(W, H)
+    hw.panel(img, page_box((12, 92, 1000, 700)))
+    hw.panel(img, page_box((1012, 92, 1268, 700)), "Sync")
+    d = ImageDraw.Draw(img)
+    for i, name in enumerate(gl.FADERS + ["MASTER"]):
+        cx = gl.MASTER_CX if name == "MASTER" else 110 + 128 * i
+        text(d, (cx, gl.FADER_NAME_Y), name, 17, (hw.AMBER if name == "MASTER" else hw.INK) + (255,))
+        hw.fader_base(img, cx, gl.FADER_CY - Y_OFF, gl.FADER_H)
+        # the value's window, under the fader (where shadow_skin puts the value)
+        top = gl.FADER_CY + gl.FADER_H // 2 + 3
+        hw.well(img, page_box((cx - 52, top, cx + 52, top + 26)), radius=4)
+    lines = ["The sequencer follows", "the MPC: its tempo,", "PLAY and STOP.", "",
+             "Off: set a tempo on", "the PERF page (BPM).", "", "The pads play the", "voices on channel 1."]
+    for n, line in enumerate(lines):
+        text(d, (1140, 270 + 26 * n), line, 16, hw.INK_DIM + (255,), bold=False)
+    return img.resize((W, H), Image.Resampling.LANCZOS)
 
 
-def page_image(widgets):
-    bg = hw.plate(W, H)
-    draw_widgets(bg, widgets)
-    return bg.resize((W, H), Image.Resampling.LANCZOS).convert("RGB")
-
-
-def modes_of(tab):
-    """when= widgets grouped by mode, in the generator's order (shadow_skin.build)."""
-    modes = {}
-    for w in tab["widgets"]:
-        if w.get("when"):
-            modes.setdefault(w["when"], []).append(w)
-    return modes
-
-
-def mode_rect(ws):
-    """The area a mode's image covers (shadow coords), as shadow_skin.build crops it."""
-    rects = [shadow_skin.baked_rect(w) for w in ws if shadow_skin.baked_rect(w)]
-    if not rects:
-        return None
-    bx, by = max(0, min(r[0] for r in rects)), max(Y_OFF, min(r[1] for r in rects))
-    bw = min(W, max(r[0] + r[2] for r in rects)) - bx
-    bh = min(Y_OFF + H, max(r[1] + r[3] for r in rects)) - by
-    return bx, by, bw, bh
-
-
-def popup_panel_image(pw, ph):
-    s = Image.new("RGBA", (pw * SS, ph * SS), (0, 0, 0, 255))
-    d = ImageDraw.Draw(s)
-    d.rounded_rectangle((0, 0, pw * SS - 1, ph * SS - 1), 8 * SS, fill=(10, 12, 15, 255),
-                        outline=hw.AMBER_DEEP + (255,), width=2 * SS)
-    return s.resize((pw, ph), Image.Resampling.LANCZOS).convert("RGB")
-
+# ---------------------------------------------------------------- main
 
 def main():
     skin = sys.argv[1]
@@ -222,10 +241,6 @@ def main():
     params = json.load(open(os.path.join(HERE, "params.json")))["params"]
     tabs, top = shadow_skin.parse_layout(os.path.join(HERE, "layout.conf"))
     shadow_skin.apply_theme(top)
-    for tab in tabs:   # option controls carry their parameter's options, as in shadow_skin.build
-        for w in tab["widgets"]:
-            if w["kind"] in ("enum_h", "enum_v", "popup") and not w.get("options"):
-                w["options"] = option_labels(w, params)
     fonts = os.path.join(HERE, "build", "fonts")
     hw.use_fonts(os.path.join(fonts, "TitilliumWeb-Bold.ttf"), os.path.join(fonts, "TitilliumWeb-SemiBold.ttf"))
     written = []
@@ -234,73 +249,65 @@ def main():
         img.save(os.path.join(pdir, name), optimize=True)
         written.append(name)
 
+    if [t["name"] for t in tabs] != ["PANEL", "MIX"]:
+        sys.exit("skin_post: expected the PANEL and MIX tabs")
+    display_only(tui, params, save)
     big_keys(tui, params, save)
-    cyan_knob_values(tui)
-    json.dump(tui, open(tui_path, "w"), indent=1)
+    for d in find_defs(tui):   # the faders' values in cyan
+        if d["key"].startswith("shSlider"):
+            for c in d["value"]["componentsData"]:
+                if c["componentData"]["type"] == "Label":
+                    c["componentData"]["data"]["textStyle"]["colour"] = "ff31d0ff"
+
+    save(panel_page(), "sh_bg_0.png")
+    save(mix_page(), "sh_bg_1.png")
 
     knob_sizes = set()
-    popopt = {}   # (text, w, h) -> image name, numbered as shadow_skin.build numbers them
-    for t, tab in enumerate(tabs):
-        widgets = tab["widgets"]
-        base = [w for w in widgets if not w.get("when")]
-        save(page_image(base), "sh_bg_%d.png" % t)
-        for m, (_, ws) in enumerate(modes_of(tab).items()):
-            rect = mode_rect(ws)
-            if rect is None:
-                continue
-            bx, by, bw, bh = rect
-            img = page_image(base + ws).crop((bx, by - Y_OFF, bx + bw, by - Y_OFF + bh))
-            save(img, "sh_mode_%d_%d.png" % (t, m))
-
-        for w in widgets:
-            k = w["kind"]
-            if k in ("enum_h", "enum_v"):
-                labels = option_labels(w, params)
-                for o, (_, _, sw, sh) in enumerate(shadow_skin.seg_rects(dict(w, options=labels))):
-                    for lit in (False, True):
-                        save(hw.key(sw, sh, labels[o].upper(), lit, led=False),
-                             "sh_seg_%s_%d_%s.png" % (w["key"], o, "on" if lit else "off"))
-            elif k == "popup":
-                wo = dict(w, options=option_labels(w, params))
-                (px, py, pw, ph), orects = shadow_skin.popup_panel(wo)
-                save(popup_panel_image(pw, ph), "sh_pop_%d_%s.png" % (t, w["key"]))
-                for o, (ox, oy, ow, oh) in enumerate(orects):
-                    sig = (wo["options"][o], ow, oh)
-                    if sig in popopt:
-                        continue
-                    name = "sh_po_%d" % len(popopt)
-                    popopt[sig] = name
-                    for lit in (False, True):
-                        save(hw.key(ow, oh, wo["options"][o].upper(), lit, led=False, size=min(20, oh * 0.45)),
-                             "%s_%s.png" % (name, "on" if lit else "off"))
-            elif k == "button":
-                for path in glob.glob(os.path.join(pdir, "sh_btn_%s_*_off.png" % w["key"])):
-                    bw, bh = Image.open(path).size
-                    label = w.get("label", "")
-                    save(hw.key(bw, bh, label, False, led=False), os.path.basename(path))
-                    save(hw.key(bw, bh, label, True, led=False), os.path.basename(path)[:-len("_off.png")] + "_on.png")
-            elif k == "stepper":
-                for side, direction in (("prev", -1), ("next", 1)):
-                    for path in glob.glob(os.path.join(pdir, "sh_arrow_*_%s_%s.png" % (w["key"], side))):
-                        aw, ah = Image.open(path).size
-                        save(hw.arrow_key(aw, ah, direction), os.path.basename(path))
-            elif k == "knob":
+    for tab in tabs:
+        for w in tab["widgets"]:
+            if w["kind"] == "button":
+                paths = glob.glob(os.path.join(pdir, "sh_btn_%s_*_off.png" % w["key"]))
+                if len(paths) != 1:
+                    sys.exit("skin_post: %d images for key %s" % (len(paths), w["key"]))
+                bw, bh = Image.open(paths[0]).size
+                on = paths[0][:-len("_off.png")] + "_on.png"
+                arrow = {"btn_40": -1, "btn_00": 1}.get(w["key"])
+                label = w.get("label", "")
+                size = 24 if label.isdigit() else 17 if w["key"].startswith("btn_") else 22
+                for lit, path in ((False, paths[0]), (True, on)):
+                    if arrow:
+                        img = hw.key(bw, bh, "", True, led=False) if lit else hw.arrow_key(bw, bh, arrow)
+                    else:
+                        img = hw.key(bw, bh, label, lit, led=False, size=size)
+                    save(img, os.path.basename(path))
+            elif w["kind"] == "knob" and not w["key"].startswith(("lcd_", "led_")):
                 knob_sizes.add(w["r"])
 
-    # Every popup option image the generator made must have been repainted.
-    made = set(os.path.basename(p) for p in glob.glob(os.path.join(pdir, "sh_po_*_off.png")))
-    ours = set("%s_off.png" % n for n in popopt.values())
-    if made != ours:
-        sys.exit("skin_post: popup option images don't line up with the generator's (%d vs %d)" % (len(made), len(ours)))
+    for path in glob.glob(os.path.join(pdir, "sh_slider_v_*.png")):
+        fw, fh = (int(v) for v in os.path.basename(path).split("_")[3].split("x"))
+        save(hw.fader_strip(fw, fh, Image.open(path).height // fh), os.path.basename(path))
 
     for r in knob_sizes:
         name = "sh_knob_r%d.png" % r
         strip = Image.open(os.path.join(pdir, name))
         frame, frames = strip.width, strip.height // strip.width
-        check_knob_strip(r, frame, frames)
-        save(hw.knob_strip(frame, frames), name)
+        if frames != 128 or frame * frames > 16384:
+            sys.exit("skin_post: knob r=%d: a %d-frame, %d px strip won't slice right on MPC" % (r, frames, frame * frames))
+        save(hw.endless_strip(frame, frames), name)
 
-    print("skin_post: %d big keys, %d images repainted" % (len(KEYS), len(written)))
+    # The generator's definitions and strips for the display cells' and LEDs'
+    # knobs are unused now.
+    defs = find_defs(tui)
+    used = {p["componentData"]["type"] for p in placements(tui, "")}
+    gone = [d["key"] for d in defs if "|" not in d["key"] and d["key"] not in used]
+    defs[:] = [d for d in defs if d["key"] not in gone]
+    for r in {w["r"] for t in tabs for w in t["widgets"] if w["kind"] == "knob" and w["key"].startswith(("lcd_", "led_"))}:
+        if r not in knob_sizes:
+            for path in glob.glob(os.path.join(pdir, "sh_knob_r%d.png" % r)):
+                os.remove(path)
+    json.dump(tui, open(tui_path, "w"), indent=1)
+
+    print("skin_post: %d images painted, %d unused definitions dropped" % (len(written), len(gone)))
 
 
 if __name__ == "__main__":
