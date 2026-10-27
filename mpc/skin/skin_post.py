@@ -6,7 +6,7 @@
    in the layout (gen_layout.py); here it loses its touch (a display-only
    definition, just a filmstrip) and gets its strip: the display's 128
    characters (dotfont.py), or an LED dark then lit.
-2. Big on/off keys. SHIFT, HOLD and MPC SYNC are `toggle`s (one flip per
+2. Big on/off keys. SHIFT, PAD LEARN and MPC SYNC are `toggle`s (one flip per
    tap); each becomes a key of its size, with its own definition and key
    images, keeping the toggle's actions.
 3. The artwork, repainted as cyan-lit graphite hardware (hardware.py): both
@@ -266,8 +266,8 @@ def setup_page():
         "VOICES: the pads play the seven voices. PAD LEARN, then hit the pads for D1, D2, D3, SN, CY, CH, OH.",
         "STEPS: the pads are the 16 step keys. PAD LEARN, then hit the pads for steps 1 to 16.",
         "",
-        "To lock a step: double-tap its key on PANEL, or hold its pad in STEPS. After half a second its",
-        "LED blinks: turn knobs or Q-Links. A double-tapped key lets go by itself; tap it to let go sooner.",
+        "To lock a step: double-tap its key on PANEL (it lights up and stays held), or hold its pad in",
+        "STEPS. Turn knobs or Q-Links: each locks to the step. Tap the key again (or let go of the pad).",
         "",
         "To record: REC on PANEL, then PLAY on the MPC; the pads (in VOICES) record into the pattern.",
     ]

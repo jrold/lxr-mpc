@@ -59,7 +59,7 @@
   },
   {
    "key": "hold",
-   "name": "Hold",
+   "name": "Unused",
    "options": [
     "Off",
     "On"
@@ -167,32 +167,28 @@
    "name": "Step 16",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_13",
    "name": "Step 15",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_14",
    "name": "Step 14",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_15",
    "name": "Step 13",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_16",
@@ -231,32 +227,28 @@
    "name": "Step 12",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_21",
    "name": "Step 11",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_22",
    "name": "Step 10",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_23",
    "name": "Step 9",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_24",
@@ -295,32 +287,28 @@
    "name": "Step 8",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_29",
    "name": "Step 7",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_30",
    "name": "Step 6",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_31",
    "name": "Step 5",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_33",
@@ -351,32 +339,28 @@
    "name": "Step 4",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_37",
    "name": "Step 3",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_38",
    "name": "Step 2",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_39",
    "name": "Step 1",
    "min": 0,
    "max": 1,
-   "momentary": true,
-   "hold_ms": 120
+   "default": 0
   },
   {
    "key": "btn_40",
@@ -1209,7 +1193,6 @@
     "enc",
     "enc_push",
     "shift",
-    "hold",
     "btn_00",
     "btn_01",
     "btn_02",

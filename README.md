@@ -21,9 +21,7 @@ BOOM family.
 - the four knobs under the display's four columns: each shows and sets the
   value of the parameter above it. The MPC's four **Q-Links** turn them too;
 - the **DATA** encoder and its **PUSH**;
-- **SHIFT** (stays on until you tap it again) and **HOLD**: tap HOLD, then a
-  key, and that key stays held down until you tap it again, for the LXR's
-  key combinations;
+- **SHIFT** (stays on until you tap it again);
 - the voice row (page keys, the seven voices, REC, PLAY, COPY), the page and
   mode row (OSC, AEG, MOD, FM, CLICK, FILTER, LFO, MIX; VOICE, PERF, LOAD,
   SAVE) and the 16 step keys, with what SHIFT makes of each under them. Each
@@ -40,9 +38,9 @@ tracks) or **STEPS** (they are the 16 step keys, held as long as a pad is).
 
 - **Pads** play the voices, or in STEPS are the step keys.
 - **Locks**: as on the LXR, a step held for half a second (its LED blinks)
-  takes what the knobs and Q-Links do. On the screen, double-tap the step's
-  key: it is held, and let go by itself a moment after the last knob turn (or
-  tap it). Or hold the step's pad (STEPS). The screen can't hold a key itself:
+  takes what the knobs and Q-Links do (two parameters a step, as on the LXR).
+  On the screen, double-tap the step's key: it lights up and stays held until
+  you tap it again. Or hold the step's pad (STEPS). The screen can't hold a key itself:
   MPC tells a plug-in's skin when a finger touches, double-taps or presses
   ENTER, never when it lifts.
 - **Recording**: REC on the panel, PLAY on the MPC, and play the pads.

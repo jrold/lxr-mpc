@@ -4,13 +4,13 @@
 // The panel's controls are parameters (mpc/gen_layout.py):
 //   btn_00..btn_40   the panel keys (the firmware's button numbers; 40 = PAGE DOWN).
 //                    A tap is down for one of the firmware's key scans and up on
-//                    the next. Momentary: they read 0 (their LEDs show the state)
-//   shift, hold      SHIFT latched; HOLD keeps the next key tapped held down
-//                    until it is tapped again (for the LXR's key combinations)
+//                    the next. They read 0 (their LEDs show the state), but a
+//                    step key held for a lock reads 1: it shows lit
+//   shift            SHIFT, latched
 //   lock_NN          a double tap on step key NN (the skin's Double Click): the
 //                    step is held as a finger would hold it (the firmware arms
-//                    its lock after 0.5 s), and let go kGrabLetGo after the last
-//                    knob turn, or when tapped. Its on/off state is left as it was
+//                    its lock after 0.5 s; every knob turned then locks to it)
+//                    until the key is tapped again. Its on/off state is kept
 //   knob1..knob4     the four knobs: each reads the value of the parameter the
 //                    display shows above it, and setting it turns the knob until
 //                    the firmware's value is there
@@ -78,10 +78,8 @@ constexpr int kSteps = 16;
 constexpr int kVoiceNote = 36;                  // the card's voice notes: 36..42 (tools/make_card.py)
 constexpr double kEncoderDetentsPerUnit = 128.0;
 constexpr int kRecentreMs = 250;
-constexpr int kGrabLetGo = VOLT_SAMPLE_RATE * 3 / 2;     // frames after the last knob turn
-constexpr int kGrabUnused = VOLT_SAMPLE_RATE * 3;        // ... or after the grab, if none
 constexpr int kDoubleTap = VOLT_SAMPLE_RATE * 6 / 10;         // frames: a double tap's own taps
-constexpr auto kGrabTapGuard = std::chrono::milliseconds(400); // its second tap's echoes
+constexpr int kGrabTapGuard = VOLT_SAMPLE_RATE * 4 / 10;     // frames: its second tap's echoes
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 constexpr const char* kPadMapFile = "padmap.txt";   // the learned pads, for new tracks
 
@@ -231,6 +229,7 @@ public:
     {
         if (msg == nullptr || len < 1 || !machine)
             return;
+        logMidi(msg, len);
         const int status = msg[0] & 0xF0;
         if (msg[0] >= 0xF8)
             return;   // realtime: the transport's clock is ours (sync)
@@ -305,11 +304,6 @@ public:
             setHeld(kShiftButton, v != 0.0);
             return;
         }
-        if (k == "hold")
-        {
-            holdNext = v != 0.0;
-            return;
-        }
         if (const int b = indexed(k, "lock_", kButtons); b >= 0)
         {
             if (v != 0.0)
@@ -364,7 +358,9 @@ public:
         const auto num = [&](const double x) { return writeText(buf, len, formatNum(x)); };
         if (k == "state")
             return writeText(buf, len, saveState());
-        if (indexed(k, "btn_", kButtons) >= 0 || indexed(k, "lock_", kButtons) >= 0)
+        if (const int b = indexed(k, "btn_", kButtons); b >= 0)
+            return num(b == grab.button ? 1.0 : 0.0);
+        if (indexed(k, "lock_", kButtons) >= 0)
             return num(0.0);
         if (const int l = indexed(k, "led_", kButtons); l >= 0)
             return num(ledOn(l) ? 1.0 : 0.0);
@@ -372,8 +368,6 @@ public:
             return num(cellCode(c) + 0.3);   // frame n of the skin's character strip shows character n
         if (k == "shift")
             return num(down[kShiftButton] ? 1.0 : 0.0);
-        if (k == "hold")
-            return num(holdNext ? 1.0 : 0.0);
         if (const int i = numbered(k, "knob", VOLT_KNOBS); i >= 0)
             return num(knobShown(i));
         if (k.size() == 13 && k.compare(0, 4, "knob") == 0 && k.compare(5, 8, "_display") == 0)
@@ -446,8 +440,6 @@ public:
             return;
         const float gain = static_cast<float>(std::pow(10.0, masterDb / 20.0));
         framesRendered += frames;
-        if (grab.button >= 0 && framesRendered - (grab.turned ? grab.lastTurn : grab.at) > (grab.turned ? kGrabLetGo : kGrabUnused))
-            letGo();
         float l[kSubBlock], r[kSubBlock];
         for (int done = 0; done < frames;)
         {
@@ -536,10 +528,7 @@ private:
     struct Grab
     {
         int button = -1;            // the step key held for a lock, or -1
-        long long at = 0;           // frames rendered when it was grabbed
-        long long lastTurn = 0;     // ... when a knob last turned
-        bool turned = false;
-        Clock::time_point guardUntil {};
+        long long guardUntil = 0;   // frames: the double tap's own late taps and echoes
     };
 
     struct Dial
@@ -582,8 +571,6 @@ private:
         for (std::size_t i = 0; i < faders.size(); ++i)
             machine->fader(static_cast<int>(i), static_cast<int>(std::lround(faders[i] * 4095.0)));
         down.fill(false);
-        latched.fill(false);
-        holdNext = false;
         grab = Grab {};
         wasPlaying = false;
         knobs = {};
@@ -599,7 +586,7 @@ private:
             changed.insert(indexedKey("lcd_", c));
         for (int l = 0; l < kButtons; ++l)
             changed.insert(indexedKey("led_", l));
-        for (const char* k : { "shift", "hold", "sync", "master", "pad_mode", "learn", "pads_info" })
+        for (const char* k : { "shift", "sync", "master", "pad_mode", "learn", "pads_info" })
             changed.insert(k);
         for (int i = 1; i <= VOLT_FADERS; ++i)
             changed.insert("fader" + std::to_string(i));
@@ -607,8 +594,8 @@ private:
 
     // ---- keys
 
-    // A tap on a panel key: down for one scan, up on the next; with HOLD,
-    // held until tapped again.
+    // A tap on a panel key: down for one scan, up on the next; on a step key
+    // held for a lock, the end of the lock.
     void tapKey(const int b)
     {
         if (bouncing(indexedKey("btn_", b)) || !machine)
@@ -616,22 +603,9 @@ private:
         const auto i = static_cast<std::size_t>(b);
         if (b == grab.button)
         {
-            if (Clock::now() < grab.guardUntil)
+            if (framesRendered < grab.guardUntil)
                 return;   // the double tap's own second tap, arriving late
             letGo();
-            return;
-        }
-        if (latched[i])
-        {
-            setHeld(b, false);
-            return;
-        }
-        if (holdNext)
-        {
-            setHeld(b, true);
-            latched[i] = true;
-            holdNext = false;
-            changed.insert("hold");
             return;
         }
         machine->tap(b);
@@ -647,33 +621,30 @@ private:
         if (grab.button >= 0)
             letGo();
         const auto i = static_cast<std::size_t>(b);
-        const auto now = Clock::now();
         auto& t = taps[i];
         t.erase(std::remove_if(t.begin(), t.end(), [&](const long long at) { return framesRendered - at > kDoubleTap; }),
                 t.end());
         if (t.size() % 2 == 1)
             machine->tap(b);   // back as it was before the double tap
         t.clear();
-        if (latched[i])
-            latched[i] = false;
         setHeld(b, true);
-        latched[i] = true;
-        grab = Grab { b, framesRendered, framesRendered, false, now + kGrabTapGuard };
+        grab = Grab { b, framesRendered + kGrabTapGuard };
+        changed.insert(indexedKey("btn_", b));   // lit
     }
 
     void letGo()
     {
         if (grab.button < 0)
             return;
-        setHeld(grab.button, false);
+        const int b = grab.button;
         grab.button = -1;
+        setHeld(b, false);
+        changed.insert(indexedKey("btn_", b));
     }
 
     void setHeld(const int b, const bool isDown)
     {
         const auto i = static_cast<std::size_t>(b);
-        if (!isDown)
-            latched[i] = false;
         if (down[i] == isDown)
             return;
         down[i] = isDown;
@@ -701,11 +672,6 @@ private:
         if (!machine || !machine->knob(i, &info))
             return;
         Knob& kn = knobs[static_cast<std::size_t>(i)];
-        if (grab.button >= 0)
-        {
-            grab.lastTurn = framesRendered;
-            grab.turned = true;
-        }
         const int target = static_cast<int>(std::lround(info.min + std::clamp(v, 0.0, 1.0) * (info.max - info.min)));
         if (target == info.value && !kn.turning)
             return;   // the host reading back what it was shown
@@ -895,6 +861,36 @@ private:
         return "PADS: GM DRUM NOTES (D1 36, D2 45, D3 48, SN 38, CY 49, CH 42, OH 46)";
     }
 
+    // What MIDI came in, the last kMidiLog messages: written to data/midi-log.txt
+    // with each save, to see where a sound came from.
+    void logMidi(const std::uint8_t* msg, const int len)
+    {
+        MidiLogEntry& e = midiLog[midiLogNext++ % midiLog.size()];
+        e.frame = framesRendered;
+        e.len = static_cast<std::uint8_t>(std::min(len, 3));
+        std::memcpy(e.bytes, msg, e.len);
+    }
+
+    std::string midiLogText() const
+    {
+        std::string s = "# the MIDI VOLTKIT received last: seconds of audio rendered, bytes\n";
+        const std::size_t n = std::min<std::size_t>(midiLogNext, midiLog.size());
+        for (std::size_t k = midiLogNext - n; k < midiLogNext; ++k)
+        {
+            const MidiLogEntry& e = midiLog[k % midiLog.size()];
+            char line[64];
+            std::snprintf(line, sizeof line, "%10.3f ", static_cast<double>(e.frame) / VOLT_SAMPLE_RATE);
+            s += line;
+            for (int i = 0; i < e.len; ++i)
+            {
+                std::snprintf(line, sizeof line, " %02X", e.bytes[i]);
+                s += line;
+            }
+            s += "\n";
+        }
+        return s;
+    }
+
     // The learned pads, for new tracks: data/padmap.txt, written off the audio thread.
     void readPadMap()
     {
@@ -917,6 +913,14 @@ private:
         saverCv.notify_all();
     }
 
+    void queueMidiLogSave() const
+    {
+        std::scoped_lock lock(saverMutex);
+        logToSave = midiLogText();
+        savePending = true;
+        saverCv.notify_all();
+    }
+
     void saveLoop()
     {
         std::unique_lock lock(saverMutex);
@@ -928,11 +932,21 @@ private:
                 savePending = false;
                 continue;
             }
-            const std::string text = toSave;
+            const std::string text = toSave, log = logToSave;
+            toSave.clear();
+            logToSave.clear();
             savePending = false;
             lock.unlock();
-            std::ofstream out(std::filesystem::path(pluginData) / kPadMapFile, std::ios::trunc);
-            out << text;
+            if (!text.empty())
+            {
+                std::ofstream out(std::filesystem::path(pluginData) / kPadMapFile, std::ios::trunc);
+                out << text;
+            }
+            if (!log.empty())
+            {
+                std::ofstream out(std::filesystem::path(pluginData) / "midi-log.txt", std::ios::trunc);
+                out << log;
+            }
             lock.lock();
         }
     }
@@ -945,6 +959,7 @@ private:
         for (std::size_t i = 0; i < faders.size(); ++i)
             s += (i ? "," : "") + formatNum(faders[i], 4);
         s += ";pads=" + std::to_string(padMode) + ";voices=" + joinNotes(voiceNotes) + ";steps=" + joinNotes(stepNotes);
+        queueMidiLogSave();
         if (machine)
         {
             machine->flush();   // what the firmware would autosave in a moment: on the card now
@@ -995,8 +1010,6 @@ private:
     std::string status;
 
     std::array<bool, kButtons> down {};
-    std::array<bool, kButtons> latched {};
-    bool holdNext = false;
     Grab grab;
     std::array<std::vector<long long>, kButtons> taps;   // recent taps by key, as frames rendered (double taps)
     long long framesRendered = 0;
@@ -1029,10 +1042,19 @@ private:
     const int debounceMs = std::getenv("VOLTKIT_DEBOUNCE_MS") ? std::atoi(std::getenv("VOLTKIT_DEBOUNCE_MS")) : kDebounceMs;
     const int recentreMs = std::getenv("VOLTKIT_RECENTRE_MS") ? std::atoi(std::getenv("VOLTKIT_RECENTRE_MS")) : kRecentreMs;
 
-    std::mutex saverMutex;
-    std::condition_variable saverCv;
-    std::string toSave;
-    bool savePending = false;
+    struct MidiLogEntry
+    {
+        long long frame = 0;
+        std::uint8_t len = 0;
+        std::uint8_t bytes[3] {};
+    };
+    std::array<MidiLogEntry, 256> midiLog {};
+    std::size_t midiLogNext = 0;
+
+    mutable std::mutex saverMutex;
+    mutable std::condition_variable saverCv;
+    mutable std::string toSave, logToSave;
+    mutable bool savePending = false;
     bool quit = false;
     std::thread saver;   // last: started after everything it uses
 };

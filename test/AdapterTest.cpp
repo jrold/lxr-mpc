@@ -236,48 +236,38 @@ int main()
     CHECK(idle < 0.01 && t.level(0.0) > 0.05 && stopped < 0.01);
     CHECK(std::abs(t.crossings(0.0) - t.crossings(0.5)) <= 2);
 
-    // a lock with HOLD: step 5 held past the firmware's 0.5 s, knob 1 (coarse
-    // pitch) turned up, step 5 let go; the step stays on and plays the locked pitch
-    const std::string osc = t.lcd();
-    t.set("hold", 1.0);
-    t.set("btn_31", 1.0);
-    t.run(0.7);
-    t.set("knob1", t.num("knob1") + 12.0 / 127.0);
-    t.run(0.1);
-    std::printf("locked       |%s|\n", t.lcd().c_str());
-    t.set("btn_31", 1.0);   // let go
-    t.run(0.2);
-    std::printf("let go       |%s|\n", t.lcd().c_str());
-    CHECK(t.lcd() == osc);   // the kit's own value is back
-    CHECK(t.led(31));        // step 5 still on
-    t.playBar();
-    std::printf("HOLD lock: step 1 %d crossings, step 5 %d, step 9 %d\n", t.crossings(0.0), t.crossings(0.5),
-                t.crossings(1.0));
-    CHECK(std::abs(t.crossings(0.0) - t.crossings(1.0)) <= 2);
-    CHECK(t.crossings(0.5) > t.crossings(0.0) + 3);
-
     // a lock with a double tap on step 13's key (its two taps, then the skin's
-    // Double Click): held, the knob turned, and let go by itself 1.5 s later
+    // Double Click): it reads lit and stays held while two knobs are turned
+    // (coarse and fine pitch), until it is tapped again
+    const std::string osc = t.lcd();
     t.set("btn_15", 1.0);
     t.set("btn_15", 1.0);
     t.set("lock_15", 1.0);
     t.run(0.7);
+    CHECK(t.num("btn_15") == 1.0);
     t.set("knob1", t.num("knob1") + 36.0 / 127.0);
-    t.run(0.1);
+    t.run(0.5);
+    t.set("knob2", t.num("knob2") + 30.0 / 127.0);
+    t.run(3.0);
     const std::string grabbed = t.lcd();
-    t.run(2.0);
+    CHECK(grabbed != osc && t.num("btn_15") == 1.0);   // still held seconds later
+    t.set("btn_15", 1.0);   // tapped again: let go
+    t.run(0.1);
     std::printf("double tap   |%s| -> |%s|\n", grabbed.c_str(), t.lcd().c_str());
-    CHECK(grabbed != osc && t.lcd() == osc);   // let go: the kit's own value is back
-    CHECK(t.led(15));                          // step 13 still on
+    CHECK(t.lcd() == osc && t.num("btn_15") == 0.0);   // the kit's own values are back
+    CHECK(t.led(15));                                   // step 13 still on
     t.playBar();
-    std::printf("double-tap lock: step 1 %d crossings, step 13 %d\n", t.crossings(0.0), t.crossings(1.5));
+    std::printf("double-tap locks: step 1 %d crossings, step 13 %d\n", t.crossings(0.0), t.crossings(1.5));
     CHECK(t.crossings(1.5) > t.crossings(0.0) + 3);
     // a double tap whose second tap came too soon to count: step 3 (off) stays off
     CHECK(!t.led(37));
     t.set("btn_37", 1.0);
     t.set("lock_37", 1.0);
-    t.run(3.5);   // not turned: let go after 3 s
-    CHECK(!t.led(37));
+    t.run(0.7);
+    CHECK(t.num("btn_37") == 1.0);
+    t.set("btn_37", 1.0);
+    t.run(0.1);
+    CHECK(!t.led(37) && t.num("btn_37") == 0.0);
 
     // a lock with the pads as step keys: pad 9 held, the knob turned, let go
     t.set("pad_mode", 1.0);

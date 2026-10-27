@@ -4,7 +4,7 @@ the LXR-02's front panel.
     python3 mpc/gen_layout.py
 
 PANEL is the machine: the 2x16 display with the four endless knobs under its
-four columns, the encoder with its push, SHIFT and HOLD; then the keys, as on
+four columns, the encoder with its push and SHIFT; then the keys, as on
 the hardware: the voice row, the page-select and mode row, and the 16 steps.
 Each key has its LED above it. MIX has the six faders, the output level and
 the MPC sync switch.
@@ -57,7 +57,7 @@ LCD_BEZEL = (36, 100, 64 + 16 * LCD_CELL + 28, 240)
 KNOB_CY, KNOB_R = 300, 40
 ENC_CX, ENC_CY, ENC_R = 925, 190, 56
 SIDE_CX, SIDE_W, SIDE_H = 1150, 170, 62
-SIDE_KEYS = [("enc_push", "PUSH", 140), ("shift", "SHIFT", 222), ("hold", "HOLD", 304)]
+SIDE_KEYS = [("enc_push", "PUSH", 160), ("shift", "SHIFT", 262)]
 
 ROWS = {"voice": (VOICE_ROW, 412, 60), "select": (SELECT_ROW, 508, 60), "steps": (STEP_ROW, 620, 84)}
 STEP_LABEL_Y = 676      # the SHIFT captions under the steps
@@ -117,14 +117,19 @@ def params():
     out.append({"key": "enc", "name": "Encoder", "min": 0, "max": 1, "default": 0.5})
     out.append({"key": "enc_push", "name": "Encoder Push", "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
     out.append({"key": "shift", "name": "Shift", "options": ["Off", "On"], "default": 0})
-    out.append({"key": "hold", "name": "Hold", "options": ["Off", "On"], "default": 0})
+    # the HOLD key's place, kept so the parameters after it keep their numbers
+    # (projects bind Q-Links and automation by number); no page shows it
+    out.append({"key": "hold", "name": "Unused", "options": ["Off", "On"], "default": 0})
     for b in range(41):
         c = caption_of(b) or ("Step %d" % (STEP_BUTTONS.index(b) + 1) if b in STEP_BUTTONS else "Key %d" % b)
         name = c if not c.isdigit() else "Step " + c
         name = {"◀": "Page Down", "▶": "Page Up"}.get(name, name.title() if name.isupper() else name)
         if b == 32:
             continue   # SHIFT is its own toggle
-        out.append({"key": btn(b), "name": name, "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
+        if b in STEP_BUTTONS:   # on (lit) while double-tapped for a lock: not momentary
+            out.append({"key": btn(b), "name": name, "min": 0, "max": 1, "default": 0})
+        else:
+            out.append({"key": btn(b), "name": name, "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
     for i, f in enumerate(FADERS):
         out.append({"key": "fader%d" % (i + 1), "name": "%s Fader" % f.title(), "min": 0, "max": 1, "default": 1,
                     "dynamic_display": True})
@@ -150,7 +155,7 @@ def params():
         out.append({"key": "lock_%02d" % b, "name": "Lock Step %d" % (STEP_BUTTONS.index(b) + 1), "min": 0, "max": 1,
                     "momentary": True, "hold_ms": 120})
     sections = [
-        {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "enc", "enc_push", "shift", "hold"]
+        {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "enc", "enc_push", "shift"]
          + [btn(b) for b in range(41) if b != 32]},
         {"label": "Mix", "keys": ["fader%d" % (i + 1) for i in range(6)] + ["master", "sync"]},
         {"label": "Setup", "keys": ["pad_mode", "learn", "pads_clear", "pads_info"]},
@@ -194,7 +199,7 @@ def layout():
               % (cx, cy - h // 2 - LED_ABOVE, LED_R, b, 2 * LED_R + 10))
     # SHIFT's LED, by its key
     w("knob    cx=%d cy=%d r=%d label=\"\" key=led_32 bw=%d ns=0 vs=0"
-      % (SIDE_CX - SIDE_W // 2 - 16, 222, LED_R, 2 * LED_R + 10))
+      % (SIDE_CX - SIDE_W // 2 - 16, SIDE_KEYS[1][2], LED_R, 2 * LED_R + 10))
     w("")
     w("[tab MIX]")
     w("# A fader per voice group, the output level and the MPC sync switch.")
@@ -220,7 +225,7 @@ def layout():
 
 
 # skin_post.py's on/off keys: toggle key -> (caption, w, h)
-BIG_KEYS = {"shift": ("SHIFT", SIDE_W, SIDE_H), "hold": ("HOLD", SIDE_W, SIDE_H), "sync": ("MPC SYNC", SIDE_W, SIDE_H),
+BIG_KEYS = {"shift": ("SHIFT", SIDE_W, SIDE_H), "sync": ("MPC SYNC", SIDE_W, SIDE_H),
             "learn": ("PAD LEARN", 300, 80)}
 
 
