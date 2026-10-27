@@ -40,7 +40,10 @@ tracks) or **STEPS** (they are the 16 step keys, held as long as a pad is).
 - **Locks**: as on the LXR, a step held for half a second (its LED blinks)
   takes what the knobs and Q-Links do (two parameters a step, as on the LXR).
   On the screen, double-tap the step's key: it lights up and stays held until
-  you tap it again. Or hold the step's pad (STEPS). The screen can't hold a key itself:
+  you tap it again; change pages meanwhile and lock there too (VOLTKIT lets
+  go of the step around the page key and holds it again, since on the LXR a
+  page key pressed with a step held edits its sub-steps). Or hold the step's
+  pad (STEPS). A voice keeps the last lock it played until its next step. The screen can't hold a key itself:
   MPC tells a plug-in's skin when a finger touches, double-taps or presses
   ENTER, never when it lifts.
 - **Recording**: REC on the panel, PLAY on the MPC, and play the pads.

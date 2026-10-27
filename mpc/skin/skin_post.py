@@ -266,8 +266,8 @@ def setup_page():
         "VOICES: the pads play the seven voices. PAD LEARN, then hit the pads for D1, D2, D3, SN, CY, CH, OH.",
         "STEPS: the pads are the 16 step keys. PAD LEARN, then hit the pads for steps 1 to 16.",
         "",
-        "To lock a step: double-tap its key on PANEL (it lights up and stays held), or hold its pad in",
-        "STEPS. Turn knobs or Q-Links: each locks to the step. Tap the key again (or let go of the pad).",
+        "To lock a step: double-tap its key on PANEL (it lights up and stays held; pages can change), or",
+        "hold its pad in STEPS. Turn knobs or Q-Links: two lock to the step. Tap the key again to let go.",
         "",
         "To record: REC on PANEL, then PLAY on the MPC; the pads (in VOICES) record into the pattern.",
     ]

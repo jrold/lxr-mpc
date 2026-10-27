@@ -10,7 +10,11 @@
 //   lock_NN          a double tap on step key NN (the skin's Double Click): the
 //                    step is held as a finger would hold it (the firmware arms
 //                    its lock after 0.5 s; every knob turned then locks to it)
-//                    until the key is tapped again. Its on/off state is kept
+//                    until the key is tapped again. Its on/off state is kept.
+//                    Another key tapped meanwhile (a page key) is tapped with the
+//                    step lifted, and the step held again after: on the LXR a
+//                    page key pressed while a step is held edits its sub-steps.
+//                    Knobs turned while it re-arms wait for it
 //   knob1..knob4     the four knobs: each reads the value of the parameter the
 //                    display shows above it, and setting it turns the knob until
 //                    the firmware's value is there
@@ -80,6 +84,7 @@ constexpr double kEncoderDetentsPerUnit = 128.0;
 constexpr int kRecentreMs = 250;
 constexpr int kDoubleTap = VOLT_SAMPLE_RATE * 6 / 10;         // frames: a double tap's own taps
 constexpr int kGrabTapGuard = VOLT_SAMPLE_RATE * 4 / 10;     // frames: its second tap's echoes
+constexpr int kArmFrames = VOLT_SAMPLE_RATE * 6 / 10;        // a held step's lock is armed by then (0.5 s)
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 constexpr const char* kPadMapFile = "padmap.txt";   // the learned pads, for new tracks
 
@@ -290,7 +295,7 @@ public:
         }
         if (const int b = indexed(k, "btn_", kButtons); b >= 0)
         {
-            if (v != 0.0)
+            if (v != 0.0 || b == grab.button)   // the held key reads 1: its tap may set 0
                 tapKey(b);
             return;
         }
@@ -440,6 +445,18 @@ public:
             return;
         const float gain = static_cast<float>(std::pow(10.0, masterDb / 20.0));
         framesRendered += frames;
+        if (grab.button >= 0 && framesRendered >= grab.armedAt)
+            for (int i = 0; i < VOLT_KNOBS; ++i)
+                if (grab.waiting[static_cast<std::size_t>(i)] >= 0 && machine)
+                {
+                    // where it was turned, on the parameter shown now
+                    VoltKnob info;
+                    if (machine->knob(i, &info))
+                        machine->knob_to(i, static_cast<int>(std::lround(
+                                                info.min + grab.waiting[static_cast<std::size_t>(i)] * (info.max - info.min))));
+                    grab.waiting[static_cast<std::size_t>(i)] = -1;
+                    knobs[static_cast<std::size_t>(i)].sentAt = Clock::now();
+                }
         float l[kSubBlock], r[kSubBlock];
         for (int done = 0; done < frames;)
         {
@@ -529,6 +546,8 @@ private:
     {
         int button = -1;            // the step key held for a lock, or -1
         long long guardUntil = 0;   // frames: the double tap's own late taps and echoes
+        long long armedAt = 0;      // frames: when the firmware will have armed the lock
+        std::array<double, VOLT_KNOBS> waiting { -1, -1, -1, -1 };   // knob positions held back until then
     };
 
     struct Dial
@@ -608,6 +627,15 @@ private:
             letGo();
             return;
         }
+        if (grab.button >= 0)
+        {
+            // the step lifted, the key tapped, the step held again (its lock re-arms)
+            machine->key(grab.button, 0);
+            machine->tap(b);
+            machine->key(grab.button, 1);
+            grab.armedAt = framesRendered + kArmFrames;
+            return;
+        }
         machine->tap(b);
         taps[i].push_back(framesRendered);
     }
@@ -628,7 +656,10 @@ private:
             machine->tap(b);   // back as it was before the double tap
         t.clear();
         setHeld(b, true);
-        grab = Grab { b, framesRendered + kGrabTapGuard };
+        grab = Grab {};
+        grab.button = b;
+        grab.guardUntil = framesRendered + kGrabTapGuard;
+        grab.armedAt = framesRendered + kArmFrames;
         changed.insert(indexedKey("btn_", b));   // lit
     }
 
@@ -637,8 +668,11 @@ private:
         if (grab.button < 0)
             return;
         const int b = grab.button;
+        const bool armed = framesRendered >= grab.armedAt;
         grab.button = -1;
         setHeld(b, false);
+        if (!armed && machine)
+            machine->tap(b);   // let go before the lock armed: that release toggled the step
         changed.insert(indexedKey("btn_", b));
     }
 
@@ -675,7 +709,10 @@ private:
         const int target = static_cast<int>(std::lround(info.min + std::clamp(v, 0.0, 1.0) * (info.max - info.min)));
         if (target == info.value && !kn.turning)
             return;   // the host reading back what it was shown
-        machine->knob_to(i, target);
+        if (grab.button >= 0 && framesRendered < grab.armedAt)
+            grab.waiting[static_cast<std::size_t>(i)] = std::clamp(v, 0.0, 1.0);   // locks once the step is armed
+        else
+            machine->knob_to(i, target);
         kn.target = target;
         kn.turning = true;
         kn.sentAt = Clock::now();
@@ -688,7 +725,9 @@ private:
         if (!machine->knob(i, &info))
             info = VoltKnob { -1000, 0, 0, 127 };
         bool report = false;
-        if (kn.turning && (info.value == kn.target || info.param != kn.param || Clock::now() - kn.sentAt > kKnobSettle))
+        const bool waiting = grab.button >= 0 && grab.waiting[static_cast<std::size_t>(i)] >= 0;
+        if (kn.turning && !waiting
+            && (info.value == kn.target || info.param != kn.param || Clock::now() - kn.sentAt > kKnobSettle))
         {
             kn.turning = false;
             report = true;   // where it got to, which may be short of where it was sent

@@ -721,15 +721,15 @@ static int knob_step(int k)
 
 /* ================================================================ each main-loop pass */
 
+/* One key change a pass: the firmware's scan reports the changes it finds in
+ * bit order, not the order they happened, and a key pressed while another is
+ * down means something else (a page key while a step is held edits its
+ * sub-steps). */
 static void apply_keys(void)
 {
-    uint8_t touched[VOLT_BUTTONS] = { 0 };
-    while (key_head != key_tail)
+    if (key_head != key_tail)
     {
         const unsigned k = key_queue[key_head].key, down = key_queue[key_head].down;
-        if (touched[k])
-            break;   /* the firmware's next scan sees the next change of this key */
-        touched[k] = 1;
         key_head = (key_head + 1) % (sizeof key_queue / sizeof key_queue[0]);
         if (k == 40)
             page_down_key = (uint8_t)down;

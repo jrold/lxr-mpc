@@ -236,26 +236,50 @@ int main()
     CHECK(idle < 0.01 && t.level(0.0) > 0.05 && stopped < 0.01);
     CHECK(std::abs(t.crossings(0.0) - t.crossings(0.5)) <= 2);
 
-    // a lock with a double tap on step 13's key (its two taps, then the skin's
-    // Double Click): it reads lit and stays held while two knobs are turned
-    // (coarse and fine pitch), until it is tapped again
+    // locks with a double tap on step 13's key (its two taps, then the skin's
+    // Double Click): it reads lit and stays held; a knob turned at once waits
+    // for the lock to arm; FILTER (whose release ends a lock in the firmware)
+    // and a knob there lock too; a tap, here one that sets 0, lets go
     const std::string osc = t.lcd();
+    t.set("btn_09", 1.0);   // FILTER page, to see the kit's own filter
+    t.run(0.05);
+    const std::string filter = t.lcd();
+    t.set("btn_16", 1.0);   // back to OSC
+    t.run(0.05);
     t.set("btn_15", 1.0);
     t.set("btn_15", 1.0);
     t.set("lock_15", 1.0);
-    t.run(0.7);
+    t.set("knob1", t.num("knob1") + 36.0 / 127.0);   // at once: waits for the lock
+    t.run(1.0);
     CHECK(t.num("btn_15") == 1.0);
-    t.set("knob1", t.num("knob1") + 36.0 / 127.0);
-    t.run(0.5);
-    t.set("knob2", t.num("knob2") + 30.0 / 127.0);
+    const std::string lockedOsc = t.lcd();
+    t.set("btn_09", 1.0);   // FILTER
+    t.set("knob1", t.num("knob1") - 60.0 / 127.0);   // at once again
     t.run(3.0);
-    const std::string grabbed = t.lcd();
-    CHECK(grabbed != osc && t.num("btn_15") == 1.0);   // still held seconds later
-    t.set("btn_15", 1.0);   // tapped again: let go
+    const std::string lockedFilter = t.lcd();
+    std::printf("held        OSC |%s|  FILTER |%s|\n", lockedOsc.c_str(), lockedFilter.c_str());
+    CHECK(lockedOsc != osc && lockedFilter != filter && t.num("btn_15") == 1.0);
+    t.set("btn_15", 0.0);   // the tap that lets go
     t.run(0.1);
-    std::printf("double tap   |%s| -> |%s|\n", grabbed.c_str(), t.lcd().c_str());
-    CHECK(t.lcd() == osc && t.num("btn_15") == 0.0);   // the kit's own values are back
-    CHECK(t.led(15));                                   // step 13 still on
+    std::printf("let go   FILTER |%s|\n", t.lcd().c_str());
+    CHECK(t.lcd() == filter && t.num("btn_15") == 0.0);   // the kit's own filter is back
+    t.set("btn_16", 1.0);
+    t.run(0.05);
+    CHECK(t.lcd() == osc);
+    CHECK(t.led(15));   // step 13 still on
+    // both locks are on the step: held again, it shows them
+    t.set("btn_15", 1.0);
+    t.set("btn_15", 1.0);
+    t.set("lock_15", 1.0);
+    t.run(0.8);
+    CHECK(t.lcd() == lockedOsc);
+    t.set("btn_09", 1.0);
+    t.run(0.8);
+    CHECK(t.lcd() == lockedFilter);
+    t.set("btn_15", 1.0);
+    t.run(0.1);
+    t.set("btn_16", 1.0);
+    t.run(0.05);
     t.playBar();
     std::printf("double-tap locks: step 1 %d crossings, step 13 %d\n", t.crossings(0.0), t.crossings(1.5));
     CHECK(t.crossings(1.5) > t.crossings(0.0) + 3);
@@ -324,7 +348,7 @@ int main()
     std::printf("learned: %s\n", t.get("pads_info").c_str());
     CHECK(t.num("learn") == 0.0);
     t.run(0.5);
-    t.note(60, 127);
+    t.note(63, 127);   // SN (the drums may still carry the last lock they played)
     CHECK(t.run(0.3) > 0.05);
     t.note(36, 127);   // no longer a pad
     CHECK(t.run(0.3) < 0.01);
