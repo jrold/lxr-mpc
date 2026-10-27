@@ -256,6 +256,29 @@ int main()
     CHECK(std::abs(t.crossings(0.0) - t.crossings(1.0)) <= 2);
     CHECK(t.crossings(0.5) > t.crossings(0.0) + 3);
 
+    // a lock with a double tap on step 13's key (its two taps, then the skin's
+    // Double Click): held, the knob turned, and let go by itself 1.5 s later
+    t.set("btn_15", 1.0);
+    t.set("btn_15", 1.0);
+    t.set("lock_15", 1.0);
+    t.run(0.7);
+    t.set("knob1", t.num("knob1") + 36.0 / 127.0);
+    t.run(0.1);
+    const std::string grabbed = t.lcd();
+    t.run(2.0);
+    std::printf("double tap   |%s| -> |%s|\n", grabbed.c_str(), t.lcd().c_str());
+    CHECK(grabbed != osc && t.lcd() == osc);   // let go: the kit's own value is back
+    CHECK(t.led(15));                          // step 13 still on
+    t.playBar();
+    std::printf("double-tap lock: step 1 %d crossings, step 13 %d\n", t.crossings(0.0), t.crossings(1.5));
+    CHECK(t.crossings(1.5) > t.crossings(0.0) + 3);
+    // a double tap whose second tap came too soon to count: step 3 (off) stays off
+    CHECK(!t.led(37));
+    t.set("btn_37", 1.0);
+    t.set("lock_37", 1.0);
+    t.run(3.5);   // not turned: let go after 3 s
+    CHECK(!t.led(37));
+
     // a lock with the pads as step keys: pad 9 held, the knob turned, let go
     t.set("pad_mode", 1.0);
     t.run(0.05);
@@ -270,9 +293,8 @@ int main()
     CHECK(t.lcd() == osc);
     CHECK(t.led(23));
     t.playBar();
-    std::printf("pad lock: step 1 %d crossings, step 9 %d, step 13 %d\n", t.crossings(0.0), t.crossings(1.0),
-                t.crossings(1.5));
-    CHECK(t.crossings(1.0) > t.crossings(1.5) + 3);
+    std::printf("pad lock: step 1 %d crossings, step 9 %d\n", t.crossings(0.0), t.crossings(1.0));
+    CHECK(t.crossings(1.0) > t.crossings(0.0) + 3);
     // a quick pad tap toggles a step, as the key does
     t.note(36 + 1, 100);
     t.run(0.05);

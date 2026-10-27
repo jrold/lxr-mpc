@@ -156,6 +156,29 @@ def display_only(tui, params, save):
         sys.exit("skin_post: placed %d display cells and %d LEDs (want 32 and 41)" % (count["lcd_"], count["led_"]))
 
 
+def step_locks(tui, params):
+    """A double tap on a step key grabs the step for a lock: each step key's
+    definition gets a Double Click action that flips its own "Lock" handle,
+    and each placement maps that handle to the step's lock_NN parameter."""
+    index = {p["key"]: i for i, p in enumerate(params)}
+    defs = {d["key"]: d for d in find_defs(tui)}
+    done = 0
+    for placed in placements(tui, "shTrig_btn_"):
+        key = param_of(placed, params)
+        lock = "lock_" + key[4:] if key and key.startswith("btn_") else None
+        if lock not in index:
+            continue
+        definition = defs[placed["componentData"]["type"]]["value"]
+        if not any(a.get("onAction") == "Double Click" for a in definition["actions"]):
+            definition["actions"].append({"version": 2, "onAction": "Double Click", "handler": "Toggle Switch",
+                                          "handleName": "Lock", "additionalData": "",
+                                          "handle remapping": {"version": 1, "map": []}})
+        placed["handle remapping"]["map"].append({"key": "Lock", "value": "Parameter %d" % index[lock]})
+        done += 1
+    if done != len(gl.STEP_BUTTONS):
+        sys.exit("skin_post: %d step keys got a double tap, want %d" % (done, len(gl.STEP_BUTTONS)))
+
+
 # ---------------------------------------------------------------- pages
 
 def text(d, xy, s, px, fill, bold=True, spacing=0):
@@ -243,8 +266,8 @@ def setup_page():
         "VOICES: the pads play the seven voices. PAD LEARN, then hit the pads for D1, D2, D3, SN, CY, CH, OH.",
         "STEPS: the pads are the 16 step keys. PAD LEARN, then hit the pads for steps 1 to 16.",
         "",
-        "To lock a step: hold its key (a pad in STEPS, or HOLD then the key on PANEL) for half a",
-        "second, until its LED blinks; turn a knob or a Q-Link; let go (tap the key again after HOLD).",
+        "To lock a step: double-tap its key on PANEL, or hold its pad in STEPS. After half a second its",
+        "LED blinks: turn knobs or Q-Links. A double-tapped key lets go by itself; tap it to let go sooner.",
         "",
         "To record: REC on PANEL, then PLAY on the MPC; the pads (in VOICES) record into the pattern.",
     ]
@@ -276,6 +299,7 @@ def main():
         sys.exit("skin_post: expected the PANEL, MIX and SETUP tabs")
     display_only(tui, params, save)
     big_keys(tui, params, save)
+    step_locks(tui, params)
     for d in find_defs(tui):   # the faders' values in cyan
         if d["key"].startswith("shSlider"):
             for c in d["value"]["componentsData"]:

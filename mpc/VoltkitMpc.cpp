@@ -7,6 +7,10 @@
 //                    the next. Momentary: they read 0 (their LEDs show the state)
 //   shift, hold      SHIFT latched; HOLD keeps the next key tapped held down
 //                    until it is tapped again (for the LXR's key combinations)
+//   lock_NN          a double tap on step key NN (the skin's Double Click): the
+//                    step is held as a finger would hold it (the firmware arms
+//                    its lock after 0.5 s), and let go kGrabLetGo after the last
+//                    knob turn, or when tapped. Its on/off state is left as it was
 //   knob1..knob4     the four knobs: each reads the value of the parameter the
 //                    display shows above it, and setting it turns the knob until
 //                    the firmware's value is there
@@ -74,6 +78,10 @@ constexpr int kSteps = 16;
 constexpr int kVoiceNote = 36;                  // the card's voice notes: 36..42 (tools/make_card.py)
 constexpr double kEncoderDetentsPerUnit = 128.0;
 constexpr int kRecentreMs = 250;
+constexpr int kGrabLetGo = VOLT_SAMPLE_RATE * 3 / 2;     // frames after the last knob turn
+constexpr int kGrabUnused = VOLT_SAMPLE_RATE * 3;        // ... or after the grab, if none
+constexpr int kDoubleTap = VOLT_SAMPLE_RATE * 6 / 10;         // frames: a double tap's own taps
+constexpr auto kGrabTapGuard = std::chrono::milliseconds(400); // its second tap's echoes
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 constexpr const char* kPadMapFile = "padmap.txt";   // the learned pads, for new tracks
 
@@ -302,6 +310,12 @@ public:
             holdNext = v != 0.0;
             return;
         }
+        if (const int b = indexed(k, "lock_", kButtons); b >= 0)
+        {
+            if (v != 0.0)
+                grabStep(b);
+            return;
+        }
         if (const int i = numbered(k, "knob", VOLT_KNOBS); i >= 0)
         {
             turnKnob(i, v);
@@ -350,7 +364,7 @@ public:
         const auto num = [&](const double x) { return writeText(buf, len, formatNum(x)); };
         if (k == "state")
             return writeText(buf, len, saveState());
-        if (indexed(k, "btn_", kButtons) >= 0)
+        if (indexed(k, "btn_", kButtons) >= 0 || indexed(k, "lock_", kButtons) >= 0)
             return num(0.0);
         if (const int l = indexed(k, "led_", kButtons); l >= 0)
             return num(ledOn(l) ? 1.0 : 0.0);
@@ -431,6 +445,9 @@ public:
         if (out == nullptr || frames <= 0)
             return;
         const float gain = static_cast<float>(std::pow(10.0, masterDb / 20.0));
+        framesRendered += frames;
+        if (grab.button >= 0 && framesRendered - (grab.turned ? grab.lastTurn : grab.at) > (grab.turned ? kGrabLetGo : kGrabUnused))
+            letGo();
         float l[kSubBlock], r[kSubBlock];
         for (int done = 0; done < frames;)
         {
@@ -516,6 +533,15 @@ private:
         Clock::time_point sentAt {};
     };
 
+    struct Grab
+    {
+        int button = -1;            // the step key held for a lock, or -1
+        long long at = 0;           // frames rendered when it was grabbed
+        long long lastTurn = 0;     // ... when a knob last turned
+        bool turned = false;
+        Clock::time_point guardUntil {};
+    };
+
     struct Dial
     {
         double last = 0.5;   // the value the host last set (and reads back)
@@ -558,6 +584,7 @@ private:
         down.fill(false);
         latched.fill(false);
         holdNext = false;
+        grab = Grab {};
         wasPlaying = false;
         knobs = {};
         markAllChanged();
@@ -587,6 +614,13 @@ private:
         if (bouncing(indexedKey("btn_", b)) || !machine)
             return;
         const auto i = static_cast<std::size_t>(b);
+        if (b == grab.button)
+        {
+            if (Clock::now() < grab.guardUntil)
+                return;   // the double tap's own second tap, arriving late
+            letGo();
+            return;
+        }
         if (latched[i])
         {
             setHeld(b, false);
@@ -601,6 +635,38 @@ private:
             return;
         }
         machine->tap(b);
+        taps[i].push_back(framesRendered);
+    }
+
+    // A double tap on a step key: its two taps toggled the step twice, unless
+    // one came too soon after the other to count; then hold it down.
+    void grabStep(const int b)
+    {
+        if (!machine || b == grab.button)
+            return;
+        if (grab.button >= 0)
+            letGo();
+        const auto i = static_cast<std::size_t>(b);
+        const auto now = Clock::now();
+        auto& t = taps[i];
+        t.erase(std::remove_if(t.begin(), t.end(), [&](const long long at) { return framesRendered - at > kDoubleTap; }),
+                t.end());
+        if (t.size() % 2 == 1)
+            machine->tap(b);   // back as it was before the double tap
+        t.clear();
+        if (latched[i])
+            latched[i] = false;
+        setHeld(b, true);
+        latched[i] = true;
+        grab = Grab { b, framesRendered, framesRendered, false, now + kGrabTapGuard };
+    }
+
+    void letGo()
+    {
+        if (grab.button < 0)
+            return;
+        setHeld(grab.button, false);
+        grab.button = -1;
     }
 
     void setHeld(const int b, const bool isDown)
@@ -635,6 +701,11 @@ private:
         if (!machine || !machine->knob(i, &info))
             return;
         Knob& kn = knobs[static_cast<std::size_t>(i)];
+        if (grab.button >= 0)
+        {
+            grab.lastTurn = framesRendered;
+            grab.turned = true;
+        }
         const int target = static_cast<int>(std::lround(info.min + std::clamp(v, 0.0, 1.0) * (info.max - info.min)));
         if (target == info.value && !kn.turning)
             return;   // the host reading back what it was shown
@@ -926,6 +997,9 @@ private:
     std::array<bool, kButtons> down {};
     std::array<bool, kButtons> latched {};
     bool holdNext = false;
+    Grab grab;
+    std::array<std::vector<long long>, kButtons> taps;   // recent taps by key, as frames rendered (double taps)
+    long long framesRendered = 0;
     std::array<Knob, VOLT_KNOBS> knobs {};
     Dial encoder;
     double encoderRest = 0.0;

@@ -1068,6 +1068,134 @@
    "max": 1,
    "display": "string",
    "type": "readout"
+  },
+  {
+   "key": "lock_39",
+   "name": "Lock Step 1",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_38",
+   "name": "Lock Step 2",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_37",
+   "name": "Lock Step 3",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_36",
+   "name": "Lock Step 4",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_31",
+   "name": "Lock Step 5",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_30",
+   "name": "Lock Step 6",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_29",
+   "name": "Lock Step 7",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_28",
+   "name": "Lock Step 8",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_23",
+   "name": "Lock Step 9",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_22",
+   "name": "Lock Step 10",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_21",
+   "name": "Lock Step 11",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_20",
+   "name": "Lock Step 12",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_15",
+   "name": "Lock Step 13",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_14",
+   "name": "Lock Step 14",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_13",
+   "name": "Lock Step 15",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "lock_12",
+   "name": "Lock Step 16",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
   }
  ],
  "sections": [

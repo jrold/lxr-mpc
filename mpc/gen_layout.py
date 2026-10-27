@@ -144,6 +144,11 @@ def params():
     out.append({"key": "learn", "name": "Pad Learn", "options": ["Off", "On"], "default": 0})
     out.append({"key": "pads_clear", "name": "Clear Pads", "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
     out.append({"key": "pads_info", "name": "Pads", "min": 0, "max": 1, "display": "string", "type": "readout"})
+    # a double tap on a step key (skin_post.py: its Double Click action) grabs
+    # the step for a lock; not on any page of their own
+    for b in STEP_BUTTONS:
+        out.append({"key": "lock_%02d" % b, "name": "Lock Step %d" % (STEP_BUTTONS.index(b) + 1), "min": 0, "max": 1,
+                    "momentary": True, "hold_ms": 120})
     sections = [
         {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "enc", "enc_push", "shift", "hold"]
          + [btn(b) for b in range(41) if b != 32]},
