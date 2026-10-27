@@ -124,7 +124,10 @@ def params():
     for b in range(41):
         out.append({"key": "led_%02d" % b, "name": "LED %d" % b, "min": 0, "max": 1, "default": 0, "display": "int"})
     for c in range(32):
-        out.append({"key": "lcd_%02d" % c, "name": "LCD %d" % (c + 1), "min": 0, "max": 127, "default": 32,
+        # 0..126: MPC shows frame round(value * 126) of the 128-frame strip, so
+        # character n reads n + 0.3 (VoltkitMpc.cpp), inside frame n however
+        # it rounds; 127 is never printable.
+        out.append({"key": "lcd_%02d" % c, "name": "LCD %d" % (c + 1), "min": 0, "max": 126, "default": 32,
                     "display": "int"})
     sections = [
         {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "enc", "enc_push", "shift", "hold"]

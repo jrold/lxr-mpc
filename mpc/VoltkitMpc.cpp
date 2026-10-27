@@ -259,7 +259,7 @@ public:
         if (const int l = indexed(k, "led_", kButtons); l >= 0)
             return num(ledOn(l) ? 1.0 : 0.0);
         if (const int c = indexed(k, "lcd_", kLcdCells); c >= 0)
-            return num(cellCode(c));   // 0..127: the skin's character strip
+            return num(cellCode(c) + 0.3);   // frame n of the skin's character strip shows character n
         if (k == "shift")
             return num(down[kShiftButton] ? 1.0 : 0.0);
         if (k == "hold")
