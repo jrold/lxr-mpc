@@ -6,28 +6,32 @@
    "name": "Knob 1",
    "min": 0,
    "max": 1,
-   "default": 0.5
+   "default": 0,
+   "dynamic_display": true
   },
   {
    "key": "knob2",
    "name": "Knob 2",
    "min": 0,
    "max": 1,
-   "default": 0.5
+   "default": 0,
+   "dynamic_display": true
   },
   {
    "key": "knob3",
    "name": "Knob 3",
    "min": 0,
    "max": 1,
-   "default": 0.5
+   "default": 0,
+   "dynamic_display": true
   },
   {
    "key": "knob4",
    "name": "Knob 4",
    "min": 0,
    "max": 1,
-   "default": 0.5
+   "default": 0,
+   "dynamic_display": true
   },
   {
    "key": "enc",
@@ -1030,6 +1034,40 @@
    "max": 126,
    "default": 32,
    "display": "int"
+  },
+  {
+   "key": "pad_mode",
+   "name": "Pads",
+   "options": [
+    "VOICES",
+    "STEPS"
+   ],
+   "default": 0
+  },
+  {
+   "key": "learn",
+   "name": "Pad Learn",
+   "options": [
+    "Off",
+    "On"
+   ],
+   "default": 0
+  },
+  {
+   "key": "pads_clear",
+   "name": "Clear Pads",
+   "min": 0,
+   "max": 1,
+   "momentary": true,
+   "hold_ms": 120
+  },
+  {
+   "key": "pads_info",
+   "name": "Pads",
+   "min": 0,
+   "max": 1,
+   "display": "string",
+   "type": "readout"
   }
  ],
  "sections": [
@@ -1097,6 +1135,15 @@
     "fader6",
     "master",
     "sync"
+   ]
+  },
+  {
+   "label": "Setup",
+   "keys": [
+    "pad_mode",
+    "learn",
+    "pads_clear",
+    "pads_info"
    ]
   }
  ]

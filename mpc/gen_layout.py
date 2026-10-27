@@ -63,6 +63,12 @@ ROWS = {"voice": (VOICE_ROW, 412, 60), "select": (SELECT_ROW, 508, 60), "steps":
 STEP_LABEL_Y = 676      # the SHIFT captions under the steps
 STEP_GAP, STEP_SPACE = 14, 6   # the steps: tighter groups and keys, so they come out wider
 
+# SETUP
+PAD_MODES = ["VOICES", "STEPS"]
+SWITCH_W, SETUP_KEY_H = 180, 80
+PADS_CY, PADS_X0, LEARN_CX, CLEAR_CX = 200, 60, 790, 1110
+PADS_INFO_Y = 300
+
 FADER_CY, FADER_W, FADER_H = 392, 70, 460
 FADER_NAME_Y = 134       # the faders' names, painted over them
 MASTER_CX = 920
@@ -105,7 +111,9 @@ def caption_of(b):
 def params():
     out = []
     for i in range(4):
-        out.append({"key": "knob%d" % (i + 1), "name": "Knob %d" % (i + 1), "min": 0, "max": 1, "default": 0.5})
+        # the parameter's own value, as text (VoltkitMpc.cpp: knobN_display)
+        out.append({"key": "knob%d" % (i + 1), "name": "Knob %d" % (i + 1), "min": 0, "max": 1, "default": 0,
+                    "dynamic_display": True})
     out.append({"key": "enc", "name": "Encoder", "min": 0, "max": 1, "default": 0.5})
     out.append({"key": "enc_push", "name": "Encoder Push", "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
     out.append({"key": "shift", "name": "Shift", "options": ["Off", "On"], "default": 0})
@@ -131,10 +139,16 @@ def params():
         # it rounds; 127 is never printable.
         out.append({"key": "lcd_%02d" % c, "name": "LCD %d" % (c + 1), "min": 0, "max": 126, "default": 32,
                     "display": "int"})
+    # the pads (SETUP)
+    out.append({"key": "pad_mode", "name": "Pads", "options": PAD_MODES, "default": 0})
+    out.append({"key": "learn", "name": "Pad Learn", "options": ["Off", "On"], "default": 0})
+    out.append({"key": "pads_clear", "name": "Clear Pads", "min": 0, "max": 1, "momentary": True, "hold_ms": 120})
+    out.append({"key": "pads_info", "name": "Pads", "min": 0, "max": 1, "display": "string", "type": "readout"})
     sections = [
         {"label": "Panel", "keys": ["knob1", "knob2", "knob3", "knob4", "enc", "enc_push", "shift", "hold"]
          + [btn(b) for b in range(41) if b != 32]},
         {"label": "Mix", "keys": ["fader%d" % (i + 1) for i in range(6)] + ["master", "sync"]},
+        {"label": "Setup", "keys": ["pad_mode", "learn", "pads_clear", "pads_info"]},
     ]
     return {"name": NAME, "params": out, "sections": sections}
 
@@ -185,11 +199,24 @@ def layout():
           % (110 + pitch * i, FADER_CY, FADER_W, FADER_H, i + 1))
     w("slider_v cx=%d cy=%d w=%d h=%d label=\"\" key=master bw=140 ns=0 vs=24" % (MASTER_CX, FADER_CY, FADER_W, FADER_H))
     w("toggle  cx=%d cy=%d label=\"MPC SYNC\" key=sync bw=%d" % (1140, 200, SIDE_W))
+    w("")
+    w("[tab SETUP]")
+    w("# What the pads do: VOICES play the seven voices (General MIDI drum notes,")
+    w("# or the pads PAD LEARN learned); STEPS makes them the 16 step keys, held")
+    w("# while a pad is: hold one and turn a knob to lock the step. PAD LEARN learns")
+    w("# the mode's pads in order; CLEAR PADS forgets them.")
+    width = len(PAD_MODES) * (SWITCH_W + 2) - 2
+    w("enum_h  cx=%d cy=%d sw=%d sh=%d label=\"PADS PLAY\" key=pad_mode options=%s"
+      % (PADS_X0 + width // 2, PADS_CY, SWITCH_W, SETUP_KEY_H, ",".join(PAD_MODES)))
+    w("toggle  cx=%d cy=%d label=\"PAD LEARN\" key=learn bw=%d" % (LEARN_CX, PADS_CY, BIG_KEYS["learn"][1]))
+    w("button  cx=%d cy=%d w=%d h=%d label=\"CLEAR PADS\" key=pads_clear" % (CLEAR_CX, PADS_CY, 280, SETUP_KEY_H))
+    w("readout cx=640 cy=%d w=1180 h=46 label=\"\" key=pads_info tsize=19 tcolor=9be8ff" % PADS_INFO_Y)
     return "\n".join(L) + "\n"
 
 
 # skin_post.py's on/off keys: toggle key -> (caption, w, h)
-BIG_KEYS = {"shift": ("SHIFT", SIDE_W, SIDE_H), "hold": ("HOLD", SIDE_W, SIDE_H), "sync": ("MPC SYNC", SIDE_W, SIDE_H)}
+BIG_KEYS = {"shift": ("SHIFT", SIDE_W, SIDE_H), "hold": ("HOLD", SIDE_W, SIDE_H), "sync": ("MPC SYNC", SIDE_W, SIDE_H),
+            "learn": ("PAD LEARN", 300, 80)}
 
 
 if __name__ == "__main__":

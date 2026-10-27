@@ -127,3 +127,7 @@ lcd_28
 lcd_29
 lcd_30
 lcd_31
+pad_mode
+learn
+pads_clear
+pads_info

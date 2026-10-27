@@ -183,7 +183,7 @@ def panel_page():
     hw.lcd_window(img, page_box(gl.LCD_BEZEL))
     d = ImageDraw.Draw(img)
     for i in range(4):
-        hw.knob_well(img, gl.knob_cx(i), gl.KNOB_CY - Y_OFF, 2 * gl.KNOB_R)
+        hw.knob_base(img, gl.knob_cx(i), gl.KNOB_CY - Y_OFF, 2 * gl.KNOB_R + 20)
         # a hairline from the display's column down to its knob
         cx = gl.knob_cx(i) * SS
         d.line((cx, (gl.LCD_BEZEL[3] - Y_OFF + 4) * SS, cx, (gl.KNOB_CY - gl.KNOB_R - 10 - Y_OFF) * SS),
@@ -231,6 +231,29 @@ def mix_page():
     return img.resize((W, H), Image.Resampling.LANCZOS)
 
 
+def setup_page():
+    img = hw.plate(W, H)
+    hw.panel(img, page_box((12, 92, 1268, 340)), "Pads")
+    hw.well(img, page_box((50, gl.PADS_INFO_Y - 23, 1230, gl.PADS_INFO_Y + 23)))
+    hw.panel(img, page_box((12, 352, 1268, 700)), "Locks and recording")
+    d = ImageDraw.Draw(img)
+    text(d, (gl.PADS_X0 + (len(gl.PAD_MODES) * (gl.SWITCH_W + 2) - 2) // 2, gl.PADS_CY - 58), "PADS PLAY", 15,
+         hw.INK_DIM + (255,), spacing=3)
+    lines = [
+        "VOICES: the pads play the seven voices. PAD LEARN, then hit the pads for D1, D2, D3, SN, CY, CH, OH.",
+        "STEPS: the pads are the 16 step keys. PAD LEARN, then hit the pads for steps 1 to 16.",
+        "",
+        "To lock a step: hold its key (a pad in STEPS, or HOLD then the key on PANEL) for half a",
+        "second, until its LED blinks; turn a knob or a Q-Link; let go (tap the key again after HOLD).",
+        "",
+        "To record: REC on PANEL, then PLAY on the MPC; the pads (in VOICES) record into the pattern.",
+    ]
+    for n, line in enumerate(lines):
+        if line:
+            text(d, (640, 430 + 34 * n), line, 18, hw.INK + (255,), bold=False)
+    return img.resize((W, H), Image.Resampling.LANCZOS)
+
+
 # ---------------------------------------------------------------- main
 
 def main():
@@ -249,8 +272,8 @@ def main():
         img.save(os.path.join(pdir, name), optimize=True)
         written.append(name)
 
-    if [t["name"] for t in tabs] != ["PANEL", "MIX"]:
-        sys.exit("skin_post: expected the PANEL and MIX tabs")
+    if [t["name"] for t in tabs] != ["PANEL", "MIX", "SETUP"]:
+        sys.exit("skin_post: expected the PANEL, MIX and SETUP tabs")
     display_only(tui, params, save)
     big_keys(tui, params, save)
     for d in find_defs(tui):   # the faders' values in cyan
@@ -261,6 +284,7 @@ def main():
 
     save(panel_page(), "sh_bg_0.png")
     save(mix_page(), "sh_bg_1.png")
+    save(setup_page(), "sh_bg_2.png")
 
     knob_sizes = set()
     for tab in tabs:
@@ -280,6 +304,12 @@ def main():
                     else:
                         img = hw.key(bw, bh, label, lit, led=False, size=size)
                     save(img, os.path.basename(path))
+            elif w["kind"] == "enum_h":   # a switch: a key per option, lit when chosen
+                options = w["options"] if isinstance(w["options"], list) else w["options"].split(",")
+                for o, (_, _, sw, sh) in enumerate(shadow_skin.seg_rects(dict(w, options=options))):
+                    for lit in (False, True):
+                        save(hw.key(sw, sh, options[o].upper(), lit, led=False, size=22),
+                             "sh_seg_%s_%d_%s.png" % (w["key"], o, "on" if lit else "off"))
             elif w["kind"] == "knob" and not w["key"].startswith(("lcd_", "led_")):
                 knob_sizes.add(w["r"])
 
@@ -293,7 +323,8 @@ def main():
         frame, frames = strip.width, strip.height // strip.width
         if frames != 128 or frame * frames > 16384:
             sys.exit("skin_post: knob r=%d: a %d-frame, %d px strip won't slice right on MPC" % (r, frames, frame * frames))
-        save(hw.endless_strip(frame, frames), name)
+        # the encoder turns endlessly; the four knobs show their parameter's value
+        save(hw.endless_strip(frame, frames) if r == gl.ENC_R else hw.knob_strip(frame, frames), name)
 
     # The generator's definitions and strips for the display cells' and LEDs'
     # knobs are unused now.

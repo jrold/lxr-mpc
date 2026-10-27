@@ -134,10 +134,9 @@ cp "$HERE/../firmware/NOTICE.md" "$BUILD/extra/engine/LXR-NOTICE.md"
 cat > "$BUILD/extra/engine/SOURCE.txt" <<EOF2
 VOLTKIT $VERSION is free software under the GNU General Public License,
 version 3 (LICENSE.txt). It runs the LXR V2 firmware by Erica Synths
-(GPL-3.0, see LXR-NOTICE.md) on a virtual board after Greg Sadetsky's
-lxr02-recomp (GPL-3.0, https://github.com/gregsadetsky/lxr02-recomp), whose
-demo card is the default card (card.vkc). VOLTKIT is not made, supported or
-endorsed by Erica Synths or by Greg Sadetsky.
+(GPL-3.0, see LXR-NOTICE.md) on VOLTKIT's own virtual board; the default card
+(card.vkc) is the firmware's own Init project. VOLTKIT is not made, supported
+or endorsed by Erica Synths.
 
 Source: https://github.com/jrold/lxr-mpc (commit $(git -C "$HERE/.." rev-parse --short HEAD))
 EOF2
