@@ -52,7 +52,7 @@ typedef struct VoltMachineApi
     void (*card_read)(uint32_t sector, uint8_t *data);
     uint32_t (*card_next)(uint32_t from);   /* the next sector >= from holding data, or VOLT_CARD_SECTORS */
     uint32_t (*card_version)(void);         /* changes whenever the firmware writes the card */
-    void (*flush)(void);                    /* the firmware's autosave of the pattern and kit, now */
+    void (*flush)(void);                    /* the pattern and kit being played to the card (the firmware's autosave) */
 
     /* Starts the firmware and runs it to its main loop. 0 when it runs. */
     int (*boot)(void);
@@ -69,6 +69,7 @@ typedef struct VoltMachineApi
     int (*knob)(int index, VoltKnob *out);  /* what is under a knob now; 0 if nothing */
     void (*knob_to)(int index, int value);  /* turn a knob until its parameter reads value */
     void (*midi)(const uint8_t *bytes, int count);   /* the DIN MIDI input, at 31250 baud */
+    void (*midi_at)(const uint8_t *bytes, int count, int frame);   /* ... arriving `frame` frames into the next render() */
 
     /* What it shows. */
     const uint8_t *(*lcd)(void);            /* 128 bytes of display RAM: line 1 at 0, line 2 at 0x40 */

@@ -70,7 +70,9 @@ namespace
 using namespace voltkit;
 using Clock = std::chrono::steady_clock;
 
-constexpr int kSubBlock = 64;                   // MIDI clock bytes land within this many frames
+constexpr int kMaxFrames = 128;                 // render() gets 1..128 frames
+constexpr int kClockLead = 260;                 // frames the MIDI clock goes early: steps then sound on the
+                                                // beat, +-0.8 ms (the LXR's 64-frame blocks; test/AdapterTest.cpp)
 constexpr int kDebounceMs = 150;                // a skin key fires its press twice
 constexpr auto kDoubleStopWindow = std::chrono::milliseconds(1200);
 constexpr auto kKnobSettle = std::chrono::milliseconds(300);   // a knob still turning reads its target
@@ -413,27 +415,32 @@ public:
     }
 
     // Called before each render: the MIDI clocks (24 per beat), start and stop
-    // that fall in the coming block, at their frames.
+    // for the coming block, each at its frame. The LXR sounds a step
+    // clockLead frames after the clock that starts it (its own 64-frame audio
+    // blocks, and the DACs' buffer), so each clock goes that much early and
+    // the step sounds on the MPC's beat.
     void songPos(const double ppq, const double bpm, const int playing, const int frames)
     {
-        clocks.clear();
-        clockFrame = 0;
         if (!machine || !sync)
         {
             wasPlaying = false;
             return;
         }
         const bool isPlaying = playing != 0 && ppq >= 0.0 && bpm > 0.0;
-        if (isPlaying && (!wasPlaying || ppq + 1e-6 < lastPpq))   // started, or the MPC jumped back (a loop)
-            clocks.push_back({ 0, 0xFA });
+        const bool started = isPlaying && (!wasPlaying || ppq + 1e-6 < lastPpq);   // or the MPC jumped back (a loop)
+        if (started)
+            sendAt(0xFA, 0);
         if (!isPlaying && wasPlaying)
-            clocks.push_back({ 0, 0xFC });
+            sendAt(0xFC, 0);
         if (isPlaying)
         {
             const double framesPerBeat = 60.0 / bpm * VOLT_SAMPLE_RATE;
-            const double end = ppq + frames / framesPerBeat;
-            for (double tick = std::ceil(ppq * 24.0 - 1e-9); tick / 24.0 < end; tick += 1.0)
-                clocks.push_back({ static_cast<int>((tick / 24.0 - ppq) * framesPerBeat), 0xF8 });
+            const double lead = clockLead / framesPerBeat;   // in beats
+            // the ticks that sound in [ppq + lead, ppq + lead + frames); on a start, also
+            // those before, which can only come now
+            const double from = started ? ppq : ppq + lead, to = ppq + lead + frames / framesPerBeat;
+            for (double tick = std::ceil(from * 24.0 - 1e-9); tick / 24.0 < to; tick += 1.0)
+                sendAt(0xF8, static_cast<int>(std::lround((tick / 24.0 - ppq - lead) * framesPerBeat)));
             lastPpq = ppq;
         }
         wasPlaying = isPlaying;
@@ -457,19 +464,12 @@ public:
                     grab.waiting[static_cast<std::size_t>(i)] = -1;
                     knobs[static_cast<std::size_t>(i)].sentAt = Clock::now();
                 }
-        float l[kSubBlock], r[kSubBlock];
+        float l[kMaxFrames], r[kMaxFrames];
         for (int done = 0; done < frames;)
         {
-            const int n = std::min(kSubBlock, frames - done);
+            const int n = std::min(kMaxFrames, frames - done);
             if (machine)
-            {
-                const int end = clockFrame + n;
-                for (const ClockByte& c : clocks)
-                    if (c.frame >= clockFrame && c.frame < end)
-                        machine->midi(&c.byte, 1);
-                clockFrame = end;
                 machine->render(l, r, n);
-            }
             else
             {
                 std::fill(l, l + n, 0.0f);
@@ -525,11 +525,10 @@ public:
     }
 
 private:
-    struct ClockByte
+    void sendAt(const std::uint8_t byte, const int frame)
     {
-        int frame;
-        std::uint8_t byte;
-    };
+        machine->midi_at(&byte, 1, std::max(frame, 0));
+    }
 
     // What a knob shows: the firmware's parameter under it, or, while it is
     // still turning there, where it was sent.
@@ -1061,8 +1060,8 @@ private:
     bool sync = true;
     bool wasPlaying = false;
     double lastPpq = 0.0;
-    std::vector<ClockByte> clocks;   // this host block's MIDI clock bytes, by frame
-    int clockFrame = 0;              // frames of this host block rendered so far
+    // VOLTKIT_CLOCK_LEAD (frames): another lead, for measuring it.
+    const int clockLead = std::getenv("VOLTKIT_CLOCK_LEAD") ? std::atoi(std::getenv("VOLTKIT_CLOCK_LEAD")) : kClockLead;
 
     int padMode = 0;                 // 0: VOICES, 1: STEPS
     bool learning = false;

@@ -47,17 +47,14 @@ int volt_panel_knob(int index, VoltKnob *out)
 }
 
 /* What preset_processTimer() does once PRESET_SAVE_TIME has passed since a
- * change: the pattern and kit to the card's tmp folder, which boot loads. */
+ * change: the pattern and kit being played to the card's tmp folder, which
+ * boot loads. Always, not only when marked changed: the firmware drops that
+ * mark for the pattern whenever the sequencer runs (PRESET_STOP_PAT_TIMER),
+ * and with the MPC's transport it mostly does. */
 void volt_panel_flush(void)
 {
-    if (preset_patDirty == 1)
-    {
-        preset_patDirty = 0;
-        preset_saveTmpPat();
-    }
-    if (preset_kitDirty == 1)
-    {
-        preset_kitDirty = 0;
-        preset_saveTmpKit();
-    }
+    preset_patDirty = 0;
+    preset_saveTmpPat();
+    preset_kitDirty = 0;
+    preset_saveTmpKit();
 }

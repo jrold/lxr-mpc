@@ -239,9 +239,9 @@ static double pot_angle[VOLT_KNOBS];
 static int knob_target[VOLT_KNOBS], knob_active[VOLT_KNOBS], knob_last[VOLT_KNOBS];
 static int knob_stall[VOLT_KNOBS], knob_dir[VOLT_KNOBS];
 
-static uint8_t midi_queue[4096];
+static struct { uint8_t byte; uint64_t at; } midi_queue[4096];   /* each byte, and when it may arrive */
 static unsigned midi_head, midi_tail;
-static uint64_t midi_next;
+static uint64_t midi_next;      /* when the wire is free for the next byte */
 
 /* ================================================================ GPIO */
 
@@ -513,8 +513,8 @@ static void dac_fire(Dac *d)
 static void midi_fire(void)
 {
     USART_TypeDef *u = (USART_TypeDef *)regs(VP_USART3, sizeof(USART_TypeDef));
-    const uint8_t b = midi_queue[midi_head];
-    midi_head = (midi_head + 1) % sizeof midi_queue;
+    const uint8_t b = midi_queue[midi_head].byte;
+    midi_head = (midi_head + 1) % (sizeof midi_queue / sizeof midi_queue[0]);
     midi_next = volt_now + us(MIDI_BYTE_US);
     if (!(u->CR1 & USART_CR1_UE) || !(u->CR1 & USART_CR1_RXNEIE) || !nvic_on[USART3_IRQn])
         return;   /* nothing listening: the byte is lost, as on the wire */
@@ -538,8 +538,12 @@ static uint64_t next_event(void)
         if (dacs[i].active && dacs[i].end < t)
             t = dacs[i].end;
     }
-    if (midi_head != midi_tail && midi_next < t)
-        t = midi_next;
+    if (midi_head != midi_tail)
+    {
+        const uint64_t m = midi_queue[midi_head].at > midi_next ? midi_queue[midi_head].at : midi_next;
+        if (m < t)
+            t = m;
+    }
     return t;
 }
 
@@ -555,7 +559,8 @@ static void deliver_due(void)
         in_isr = 1;
         if (systick_on() && systick_next == t)
             systick_fire();
-        else if (midi_head != midi_tail && midi_next == t)
+        else if (midi_head != midi_tail
+                 && (midi_queue[midi_head].at > midi_next ? midi_queue[midi_head].at : midi_next) == t)
             midi_fire();
         else
         {
@@ -964,18 +969,35 @@ static void api_knob_to(int index, int value)
     knob_active[index] = value != info.value;
 }
 
-static void api_midi(const uint8_t *bytes, int count)
+static uint64_t cycles_per_frame_q32(void)
 {
-    if (midi_head == midi_tail && midi_next < volt_now)
-        midi_next = volt_now;
+    return ((uint64_t)volt_hclk << 32) / (volt_i2s_fs ? volt_i2s_fs : 44100u);
+}
+
+static void midi_queue_at(const uint8_t *bytes, int count, uint64_t at)
+{
     for (int i = 0; i < count; i++)
     {
-        const unsigned next = (midi_tail + 1) % sizeof midi_queue;
+        const unsigned next = (midi_tail + 1) % (sizeof midi_queue / sizeof midi_queue[0]);
         if (next == midi_head)
             return;
-        midi_queue[midi_tail] = bytes[i];
+        midi_queue[midi_tail].byte = bytes[i];
+        midi_queue[midi_tail].at = at;
         midi_tail = next;
     }
+}
+
+static void api_midi(const uint8_t *bytes, int count)
+{
+    midi_queue_at(bytes, count, run_until > volt_now ? run_until : volt_now);
+}
+
+/* `frame` frames after the next render() starts: the host's clock, which
+ * run_until keeps (the firmware may have run a little past it). */
+static void api_midi_at(const uint8_t *bytes, int count, int frame)
+{
+    const uint64_t at = run_until + ((cycles_per_frame_q32() * (uint64_t)(frame < 0 ? 0 : frame)) >> 32);
+    midi_queue_at(bytes, count, at);
 }
 
 static const uint8_t *api_lcd(void) { return lcd.ddram; }
@@ -990,7 +1012,7 @@ __attribute__((visibility("default"))) const VoltMachineApi *volt_machine_api(vo
         VOLT_MACHINE_API_VERSION,
         api_card_write, api_card_read, api_card_next, api_card_version, api_flush,
         api_boot, api_render,
-        api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_midi,
+        api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_midi, api_midi_at,
         api_lcd, api_lcd_glyphs, api_lcd_version, api_leds, api_led_version,
     };
     return &api;

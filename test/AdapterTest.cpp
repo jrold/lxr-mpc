@@ -15,6 +15,8 @@ int mpc_engine_changed(void* inst, char* key, int len);
 #include <cstdio>
 #include <cstdlib>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <set>
 #include <string>
 #include <vector>
@@ -140,6 +142,35 @@ struct Track
         return n;
     }
 
+    // Each hit's time against its step (16ths at bpm), in ms: an onset is a
+    // sharp rise of the 2.5 ms loudness.
+    std::vector<double> hitTimes()
+    {
+        std::vector<double> out;
+        const double stepFrames = 60.0 / bpm / 4.0 * kRate;
+        double prev = 0.0;
+        long last = -100000;
+        for (std::size_t w = 0; w + 110 <= audio.size(); w += 110)
+        {
+            double e = 0.0;
+            for (std::size_t i = w; i < w + 110; ++i)
+                e += audio[i] * audio[i];
+            e = std::sqrt(e / 110.0);
+            if (e > 0.03 && e > 4.0 * prev + 0.01 && static_cast<long>(w) - last > 2200)
+            {
+                // the window's first sample above a tenth of its loudness
+                std::size_t i = w;
+                while (i < w + 110 && std::fabs(audio[i]) < 0.1 * e)
+                    ++i;
+                const double steps = i / stepFrames;
+                out.push_back((steps - std::round(steps)) * stepFrames * 1000.0 / kRate);
+                last = static_cast<long>(w);
+            }
+            prev = e;
+        }
+        return out;
+    }
+
     double level(const double at)
     {
         double peak = 0.0;
@@ -235,6 +266,29 @@ int main()
     std::printf("transport: %.3f stopped, step 1 %.3f, %.3f after stop\n", idle, t.level(0.0), stopped);
     CHECK(idle < 0.01 && t.level(0.0) > 0.05 && stopped < 0.01);
     CHECK(std::abs(t.crossings(0.0) - t.crossings(0.5)) <= 2);
+    {
+        // in time: eight bars, every hit against its step
+        t.playing = true;
+        t.ppq = 0.0;
+        t.recording = true;
+        t.audio.clear();
+        t.run(16.0);
+        t.recording = false;
+        t.playing = false;
+        t.run(0.3);
+        const std::vector<double> d = t.hitTimes();
+        double lo = 1e9, hi = -1e9, sum = 0.0;
+        for (std::size_t i = 1; i + 1 < d.size(); ++i)   // not the first (late by the lead after a start) or the last
+        {
+            lo = std::fmin(lo, d[i]);
+            hi = std::fmax(hi, d[i]);
+            sum += d[i];
+        }
+        const double mean = d.size() > 2 ? sum / (d.size() - 2) : 0.0;
+        std::printf("timing: %zu hits, %.2f ms on average from the step, %.2f to %.2f\n", d.size(), mean, lo, hi);
+        CHECK(d.size() >= 32);
+        CHECK(std::fabs(mean) < 1.0 && hi - lo < 1.6);
+    }
 
     // locks with a double tap on step 13's key (its two taps, then the skin's
     // Double Click): it reads lit and stays held; a knob turned at once waits
@@ -367,6 +421,14 @@ int main()
     // the state: the card, the pads and the controls, back on a new track
     const std::string state = t.get("state");
     std::printf("state: %zu bytes\n", state.size());
+    t.run(0.2);
+    {
+        std::ifstream log(std::filesystem::path(dataDir) / "midi-log.txt");
+        std::string all((std::istreambuf_iterator<char>(log)), std::istreambuf_iterator<char>());
+        std::printf("midi log: %zu bytes, last line %s", all.size(),
+                    all.size() > 40 ? all.substr(all.rfind('\n', all.size() - 2) + 1).c_str() : all.c_str());
+        CHECK(all.find(" 90 3F 7F") != std::string::npos);   // the snare's learned pad, played above
+    }
     CHECK(state.rfind("v=3;", 0) == 0 && state.find(";card=VktD") != std::string::npos);
     CHECK(state.find(";voices=60,61,62,63,64,65,66") != std::string::npos);
     {
