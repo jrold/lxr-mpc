@@ -197,12 +197,12 @@ def panel_page():
     # the key rows, each on its strip (the LEDs sit in its top margin)
     for name, (row, cy, h) in gl.ROWS.items():
         top = cy - h // 2 - 2 * gl.LED_R - gl.LED_ABOVE - 2
-        bottom = cy + h // 2 + (34 if name == "steps" else 6)
+        bottom = cy + h // 2 + (30 if name == "steps" else 6)
         hw.tray(img, page_box((gl.X0 - 10, top, gl.X1 + 10, bottom)), screws=False)
     d = ImageDraw.Draw(img)
     steps = gl.row_keys(gl.STEP_ROW, 0)
     for (_, _, cx, _), label in zip(steps, gl.STEP_LABELS):
-        text(d, (cx, gl.STEP_LABEL_Y), label, 12, hw.INK_DIM + (255,), bold=False)
+        text(d, (cx, gl.STEP_LABEL_Y), label, 13, hw.INK_DIM + (255,), bold=False)
     # SHIFT reads the step captions: a cyan rule under each group of four
     for g in range(4):
         x0 = steps[4 * g][2] - steps[4 * g][3] // 2
@@ -273,7 +273,7 @@ def main():
                 on = paths[0][:-len("_off.png")] + "_on.png"
                 arrow = {"btn_40": -1, "btn_00": 1}.get(w["key"])
                 label = w.get("label", "")
-                size = 24 if label.isdigit() else 17 if w["key"].startswith("btn_") else 22
+                size = 30 if label.isdigit() else 17 if w["key"].startswith("btn_") else 22
                 for lit, path in ((False, paths[0]), (True, on)):
                     if arrow:
                         img = hw.key(bw, bh, "", True, led=False) if lit else hw.arrow_key(bw, bh, arrow)

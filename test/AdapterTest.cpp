@@ -43,6 +43,8 @@ struct Track
     bool playing = false;
     double bpm = 120.0;
     std::set<std::string> seen;   // changed keys reported
+    std::vector<float> audio;     // the left channel, when recording
+    bool recording = false;
 
     Track() { inst = E->create(nullptr); }
     ~Track() { E->destroy(inst); }
@@ -72,6 +74,9 @@ struct Track
                 ppq += kBlock / (60.0 / bpm * kRate);
             for (const std::int16_t s : out)
                 peak = std::fmax(peak, std::abs(s) / 32768.0);
+            if (recording)
+                for (int i = 0; i < kBlock; ++i)
+                    audio.push_back(out[2 * i] / 32768.0f);
             char key[64];
             while (mpc_engine_changed(inst, key, sizeof key))
                 seen.insert(key);
@@ -222,6 +227,56 @@ int main()
     CHECK(idle < 0.01);
     CHECK(played > 0.05);
     CHECK(stopped < 0.01);
+
+    // a parameter lock: HOLD, step 5 held until armed, knob 1 turned, step let go;
+    // the step stays on and plays the locked value
+    t.set("btn_16", 1.0);   // OSC page
+    t.run(0.3);
+    const std::string before = t.lcd();
+    t.set("hold", 1.0);
+    t.set("btn_31", 1.0);   // step 5, held
+    t.run(2.5);
+    std::printf("step 5 held  |%s|\n", t.lcd().c_str());
+    for (int i = 0; i < 10; ++i)
+    {
+        t.set("knob1", 0.5 + 1.0 / 128.0);
+        t.run(0.02);
+    }
+    t.run(0.3);
+    std::printf("locked       |%s|\n", t.lcd().c_str());
+    t.set("btn_31", 1.0);   // let go
+    t.run(0.5);
+    std::printf("let go       |%s|  leds:", t.lcd().c_str());
+    setenv("VOLTKIT_VERBOSE", "1", 1);
+    t.ledsLit();
+    unsetenv("VOLTKIT_VERBOSE");
+    std::printf("\n");
+    CHECK(t.lcd() == before);           // the kit's own value is back
+    CHECK(t.num("led_31") > 0.5);       // step 5 still on
+    {
+        // play one bar from the top: step 1 plays the kit's pitch, step 5 the locked one
+        t.playing = true;
+        t.ppq = 0.0;
+        t.recording = true;
+        t.audio.clear();
+        t.run(2.0);
+        t.recording = false;
+        t.playing = false;
+        t.run(0.2);
+        // the zero crossings 30..110 ms after each step's onset, once the pitch
+        // sweep has settled (steps are 1/16: 0.125 s at 120 BPM)
+        const auto crossings = [&](const double at) {
+            int n = 0;
+            const std::size_t a = static_cast<std::size_t>((at + 0.03) * kRate), b = a + kRate * 8 / 100;
+            for (std::size_t i = a + 1; i < b && i < t.audio.size(); ++i)
+                n += (t.audio[i - 1] < 0) != (t.audio[i] < 0);
+            return n;
+        };
+        const int step1 = crossings(0.0), step5 = crossings(0.5), step9 = crossings(1.0);
+        std::printf("crossings: step 1 %d, step 5 (locked) %d, step 9 %d\n", step1, step5, step9);
+        CHECK(std::abs(step1 - step9) <= 2);   // unlocked steps alike
+        CHECK(step5 > step1 + 4);              // the lock raised step 5's pitch
+    }
 
     // the faders and master level
     t.set("master", -6.0);

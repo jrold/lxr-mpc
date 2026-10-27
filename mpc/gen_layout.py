@@ -59,8 +59,9 @@ ENC_CX, ENC_CY, ENC_R = 925, 190, 56
 SIDE_CX, SIDE_W, SIDE_H = 1150, 170, 62
 SIDE_KEYS = [("enc_push", "PUSH", 140), ("shift", "SHIFT", 222), ("hold", "HOLD", 304)]
 
-ROWS = {"voice": (VOICE_ROW, 412, 60), "select": (SELECT_ROW, 508, 60), "steps": (STEP_ROW, 606, 56)}
-STEP_LABEL_Y = 652      # the SHIFT captions under the steps
+ROWS = {"voice": (VOICE_ROW, 412, 60), "select": (SELECT_ROW, 508, 60), "steps": (STEP_ROW, 620, 84)}
+STEP_LABEL_Y = 676      # the SHIFT captions under the steps
+STEP_GAP, STEP_SPACE = 14, 6   # the steps: tighter groups and keys, so they come out wider
 
 FADER_CY, FADER_W, FADER_H = 392, 70, 460
 FADER_NAME_Y = 134       # the faders' names, painted over them
@@ -71,12 +72,13 @@ def row_keys(row, height):
     """[(button, caption, cx, w)] for a row spread across X0..X1."""
     keys = [k for k in row if k]
     gaps = len(row) - len(keys)
-    pitch = (X1 - X0 - gaps * GAP) / len(keys)
-    width = round(pitch - 10)
+    gap, space = (STEP_GAP, STEP_SPACE) if row is STEP_ROW else (GAP, 10)
+    pitch = (X1 - X0 - gaps * gap) / len(keys)
+    width = round(pitch - space)
     out, x = [], X0
     for k in row:
         if k is None:
-            x += GAP
+            x += gap
             continue
         out.append((k[0], k[1], round(x + pitch / 2), width))
         x += pitch
