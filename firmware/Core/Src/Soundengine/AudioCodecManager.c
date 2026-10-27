@@ -24,7 +24,7 @@ volatile INDTCMZ uint8_t bCurrentSampleValid = 0;
 int CodecInit()
 {
     dma_buffer[0] = 32756;
-    codec_initCsCodec((uint32_t)dma_buffer, OUTPUT_DMA_SIZE*2,(uint32_t)dma_buffer2, OUTPUT_DMA_SIZE*2);
+    codec_initCsCodec((codec_addr_t)dma_buffer, OUTPUT_DMA_SIZE*2,(codec_addr_t)dma_buffer2, OUTPUT_DMA_SIZE*2);   // VOLTKIT (modified): was (uint32_t)
     return 0;
 }
 //------------------------------------------------------------------

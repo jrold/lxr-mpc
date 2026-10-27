@@ -41,6 +41,10 @@ static void modNode_setOriginalValueChanged(ModulationNode* vm, uint16_t idx)
 
 	if(vm->destination == idx) { //parameter is active in this modulator
 		const Parameter *p=&parameterArray[idx];
+#ifdef VOLTKIT
+		// VOLTKIT (modified): a parameter with no storage (as paramArray_setParameter checks).
+		if(!p->ptr) return;
+#endif
 
 			//update orig value
 			switch(p->type)

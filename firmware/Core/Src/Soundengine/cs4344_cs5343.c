@@ -218,7 +218,7 @@ static void codec_AudioInterface_Init_DAC()
 #endif
 }
 //----------------------------------------------------------------------------------
-void codec_start_dac1(uint32_t Addr, uint32_t Size)
+void codec_start_dac1(codec_addr_t Addr, uint32_t Size)
 {
 
 	HAL_I2S_Transmit_DMA(&hi2s2, (uint16_t*)Addr, (uint16_t) Size);
@@ -429,7 +429,7 @@ void codec_InitGPIO_DAC2(void)
 #endif
 }
 //-----------------------------------------------------------------------------------------------------
-void codec_start_dac2(uint32_t Addr, uint32_t Size)
+void codec_start_dac2(codec_addr_t Addr, uint32_t Size)
 {
 	HAL_I2S_Transmit_DMA(&hi2s3, (uint16_t*)Addr, (uint16_t) Size);
 #if 0
@@ -627,7 +627,7 @@ void codec_InitGPIO_ADC(void)
 
 }
 //-----------------------------------------------------------------------------------------------------
-void codec_start_adc(uint32_t Addr, uint32_t Size)
+void codec_start_adc(codec_addr_t Addr, uint32_t Size)
 {
 	/* Configure the buffer address and size */
 	DMA_InitStructure2.DMA_Memory0BaseAddr = (uint32_t)Addr;
@@ -685,7 +685,7 @@ static void codec_InitGPIO(void)
 
 }
 //-----------------------------------------------------------------------------------------------------
-void codec_start(uint32_t Addr1, uint32_t Size1, uint32_t Addr2, uint32_t Size2)
+void codec_start(codec_addr_t Addr1, uint32_t Size1, codec_addr_t Addr2, uint32_t Size2)
 {
 	codec_start_dac1(Addr1,Size1);
 #if USE_DAC2
@@ -721,7 +721,7 @@ void codec_initDma()
 
 }
 //----------------------------------------------------------------------------------
-void codec_initCsCodec(uint32_t Addr1, uint32_t Size1,uint32_t Addr2, uint32_t Size2)
+void codec_initCsCodec(codec_addr_t Addr1, uint32_t Size1,codec_addr_t Addr2, uint32_t Size2)
 {
 	codec_InitGPIO();
 	codec_AudioInterface_Init(44100);

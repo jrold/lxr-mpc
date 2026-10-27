@@ -22,6 +22,14 @@
 // VOLTKIT (modified): float to unsigned as the Cortex-M7 converts it
 // (negative -> 0), which C leaves undefined.
 #ifdef VOLTKIT
+static inline uint32_t volt_f2u(float x)
+{
+	if (!(x > 0.0f))
+		return 0;
+	if (x >= 4294967296.0f)
+		return 0xffffffffu;
+	return (uint32_t)x;
+}
 #define VOLT_F2U(x) volt_f2u(x)
 #else
 #define VOLT_F2U(x) ((uint32_t)(x))

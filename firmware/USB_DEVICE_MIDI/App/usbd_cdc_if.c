@@ -285,6 +285,12 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
   uint8_t result = USBD_OK;
   /* USER CODE BEGIN 7 */
   USBD_CDC_HandleTypeDef *hcdc = (USBD_CDC_HandleTypeDef*)hUsbDeviceFS.pClassData;
+#ifdef VOLTKIT
+  // VOLTKIT (modified): no usb host, no class data (the STM32 reads address 0 harmlessly).
+  if (hcdc == NULL){
+    return USBD_FAIL;
+  }
+#endif
   if (hcdc->TxState != 0){
     return USBD_BUSY;
   }

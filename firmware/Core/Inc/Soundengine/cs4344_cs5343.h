@@ -141,6 +141,13 @@ extern INDTCMZ int16_t dma_buffer2[OUTPUT_DMA_SIZE*4]; 	// *4 because we need 16
 #endif
 
 
-void codec_initCsCodec(uint32_t Addr1, uint32_t Size1,uint32_t Addr2, uint32_t Size2);
+#ifdef VOLTKIT
+// VOLTKIT (modified): buffer addresses as pointer-sized integers, so they
+// survive on a 64-bit host (the STM32 has 32-bit addresses).
+typedef uintptr_t codec_addr_t;
+#else
+typedef uint32_t codec_addr_t;
+#endif
+void codec_initCsCodec(codec_addr_t Addr1, uint32_t Size1,codec_addr_t Addr2, uint32_t Size2);
 
 #endif /* CS4344_CS5343_H_ */

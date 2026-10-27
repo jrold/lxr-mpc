@@ -695,7 +695,14 @@ uint8_t mainParameters[NUM_KIT_SLOTS][END_OF_SOUND_PARAMETERS];
 //uint8_t abs_pot_Parameter_position[NUM_PARAMS];
 uint8_t activeParameters[NUM_PARAMS];
 //uint8_t morphParameters[END_OF_SOUND_PARAMETERS];/**< a second array for sound x-fade to another preset*/
+#ifdef VOLTKIT
+// VOLTKIT (modified): start on kit slot 0 instead of a null pointer. The
+// morph is read before a project load sets this; on the STM32 address 0 is
+// readable (the boot alias), on the MPC it is not.
+uint8_t *morphParameters = mainParameters[0];
+#else
 uint8_t *morphParameters;
+#endif
 //-----------------------------------------------------------------
 void copyNameToEditBuffer(uint8_t presetNr, uint8_t nameType)
 {

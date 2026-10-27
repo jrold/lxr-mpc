@@ -116,7 +116,10 @@ void Error_Handler(void);
 /* USER CODE BEGIN Private defines */
 
 
-#ifndef VOLTKIT   // VOLTKIT (modified): see Soundengine/config.h
+#ifdef VOLTKIT   // VOLTKIT (modified): no tightly coupled memory, as Soundengine/config.h
+#define INDTCM
+#define INDTCMZ
+#else
 // Helper to declare variable in CCM memory, pre-loaded from flash at startup
 #define INDTCM __attribute__ ((section(".dtcm")))
 
