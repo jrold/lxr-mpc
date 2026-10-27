@@ -240,6 +240,11 @@ public:
                 machine->adc(VOLT_ADC_KNOBS + i, faderRaw(faders[static_cast<std::size_t>(i)]));
             return;
         }
+        if (indexed(k, "lcd_", kLcdCells) >= 0 || indexed(k, "led_", kButtons) >= 0)
+        {
+            changed.insert(k);   // shown, never set: put back what the machine shows
+            return;
+        }
         if (k == "master")
             masterDb = std::clamp(v, -24.0, 6.0);
         else if (k == "sync")

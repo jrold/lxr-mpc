@@ -148,15 +148,17 @@ def layout():
     w("qlinks_track = knob1,knob2,knob3,knob4")
     w("")
     w("[tab PANEL]")
+    w("# The four endless knobs, under the display's columns; the encoder. First:")
+    w("# a page's Q-Links go to its first controls in this file (MPC's four turn")
+    w("# knob1..knob4).")
+    for i in range(4):
+        w("knob    cx=%d cy=%d r=%d label=\"\" key=knob%d bw=%d ns=0 vs=0" % (knob_cx(i), KNOB_CY, KNOB_R, i + 1, 2 * KNOB_R + 20))
+    w("knob    cx=%d cy=%d r=%d label=\"\" key=enc bw=%d ns=0 vs=0" % (ENC_CX, ENC_CY, ENC_R, 2 * ENC_R + 20))
     w("# The display: a display-only knob per character cell (skin_post.py).")
     for r, cy in enumerate(LCD_ROWS):
         for c in range(16):
             w("knob    cx=%d cy=%d r=%d label=\"\" key=lcd_%02d bw=%d ns=0 vs=0"
               % (LCD_X + c * LCD_CELL + LCD_CELL // 2, cy, LCD_CELL // 2 - 5, r * 16 + c, LCD_CELL))
-    w("# The four endless knobs, under the display's columns; the encoder.")
-    for i in range(4):
-        w("knob    cx=%d cy=%d r=%d label=\"\" key=knob%d bw=%d ns=0 vs=0" % (knob_cx(i), KNOB_CY, KNOB_R, i + 1, 2 * KNOB_R + 20))
-    w("knob    cx=%d cy=%d r=%d label=\"\" key=enc bw=%d ns=0 vs=0" % (ENC_CX, ENC_CY, ENC_R, 2 * ENC_R + 20))
     for key, cap, cy in SIDE_KEYS:
         kind = "button" if key == "enc_push" else "toggle"
         if kind == "button":
