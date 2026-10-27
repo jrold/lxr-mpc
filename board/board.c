@@ -48,6 +48,8 @@ extern void DMA1_Stream5_IRQHandler(void);
 extern void USART3_IRQHandler(void);
 int volt_panel_knob(int index, VoltKnob *out);
 void volt_panel_flush(void);
+int volt_panel_lock_armed(void);
+int volt_panel_lockable(void);
 
 /* ---- clocks and time */
 volatile uint32_t volt_primask;
@@ -987,6 +989,16 @@ static void midi_queue_at(const uint8_t *bytes, int count, uint64_t at)
     }
 }
 
+static int api_lock_armed(void)
+{
+    return booted && fw_alive && !fw_running && volt_panel_lock_armed();
+}
+
+static int api_lockable(void)
+{
+    return booted && fw_alive && !fw_running && volt_panel_lockable();
+}
+
 static void api_midi(const uint8_t *bytes, int count)
 {
     midi_queue_at(bytes, count, run_until > volt_now ? run_until : volt_now);
@@ -1012,7 +1024,7 @@ __attribute__((visibility("default"))) const VoltMachineApi *volt_machine_api(vo
         VOLT_MACHINE_API_VERSION,
         api_card_write, api_card_read, api_card_next, api_card_version, api_flush,
         api_boot, api_render,
-        api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_midi, api_midi_at,
+        api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_lock_armed, api_lockable, api_midi, api_midi_at,
         api_lcd, api_lcd_glyphs, api_lcd_version, api_leds, api_led_version,
     };
     return &api;

@@ -115,6 +115,8 @@ target_link_libraries(voltkit_adapter PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 # the adapter as the wrapper drives it (VOLTKIT_ENGINE, VOLTKIT_CARD)
 add_executable(voltkit-adapter-test ../test/AdapterTest.cpp)
 target_link_libraries(voltkit-adapter-test PRIVATE voltkit_adapter)
+add_executable(voltkit-stress-test ../test/StressTest.cpp)
+target_link_libraries(voltkit-stress-test PRIVATE voltkit_adapter)
 
 if(MPC_PARAMS_DIR)
     if(NOT MPC_WRAPPER_SOURCE)

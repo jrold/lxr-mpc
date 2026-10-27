@@ -14,7 +14,9 @@
 //                    Another key tapped meanwhile (a page key) is tapped with the
 //                    step lifted, and the step held again after: on the LXR a
 //                    page key pressed while a step is held edits its sub-steps.
-//                    Knobs turned while it re-arms wait for it
+//                    The step is only ever lifted once the firmware has armed
+//                    its lock (lifted sooner, the firmware takes it as a tap):
+//                    keys, knobs and the let-go meanwhile wait for that
 //   knob1..knob4     the four knobs: each reads the value of the parameter the
 //                    display shows above it, and setting it turns the knob until
 //                    the firmware's value is there
@@ -73,20 +75,23 @@ using Clock = std::chrono::steady_clock;
 constexpr int kMaxFrames = 128;                 // render() gets 1..128 frames
 constexpr int kClockLead = 260;                 // frames the MIDI clock goes early: steps then sound on the
                                                 // beat, +-0.8 ms (the LXR's 64-frame blocks; test/AdapterTest.cpp)
-constexpr int kDebounceMs = 150;                // a skin key fires its press twice
+constexpr int kDebounceMs = 40;                 // a skin key's touch sets it twice, at once; a finger's
+                                                // second tap is never this quick
 constexpr auto kDoubleStopWindow = std::chrono::milliseconds(1200);
 constexpr auto kKnobSettle = std::chrono::milliseconds(300);   // a knob still turning reads its target
 constexpr int kButtons = VOLT_BUTTONS;          // 41
 constexpr int kShiftButton = 32;                // BUT_SHIFT
 constexpr int kLcdCells = 32;
+constexpr double kClockJump = 0.125;   // beats the MPC's position may be off the clock's before it is a jump
+constexpr double kClockPull = 0.01;    // how much of that offset a block takes up
 constexpr int kVoices = 7;
 constexpr int kSteps = 16;
 constexpr int kVoiceNote = 36;                  // the card's voice notes: 36..42 (tools/make_card.py)
 constexpr double kEncoderDetentsPerUnit = 128.0;
 constexpr int kRecentreMs = 250;
-constexpr int kDoubleTap = VOLT_SAMPLE_RATE * 6 / 10;         // frames: a double tap's own taps
-constexpr int kGrabTapGuard = VOLT_SAMPLE_RATE * 4 / 10;     // frames: its second tap's echoes
-constexpr int kArmFrames = VOLT_SAMPLE_RATE * 6 / 10;        // a held step's lock is armed by then (0.5 s)
+constexpr int kDoubleTap = VOLT_SAMPLE_RATE * 4 / 10;         // frames: a double tap's own taps (MPC's double click)
+constexpr int kGrabTapGuard = VOLT_SAMPLE_RATE * 6 / 100;    // frames: the echo of the key shown lit
+constexpr int kArmTimeout = VOLT_SAMPLE_RATE * 3 / 2;       // a held step not armed by then never will be
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 constexpr const char* kPadMapFile = "padmap.txt";   // the learned pads, for new tracks
 
@@ -261,7 +266,7 @@ public:
             {
                 const int s = stepFor(note);
                 if (s >= 0)
-                    machine->key(kStepButtons[static_cast<std::size_t>(s)], on ? 1 : 0);
+                    keySet(kStepButtons[static_cast<std::size_t>(s)], on ? 1 : 0);
             }
             return;
         }
@@ -299,6 +304,10 @@ public:
         {
             if (v != 0.0 || b == grab.button)   // the held key reads 1: its tap may set 0
                 tapKey(b);
+            // a tap flips the key's value twice on MPC's side; if it ends other
+            // than lit-while-held, show it again as it is
+            if ((v != 0.0) != (b == grab.button && !grab.releasing))
+                changed.insert(k);
             return;
         }
         if (indexed(k, "lcd_", kLcdCells) >= 0 || indexed(k, "led_", kButtons) >= 0)
@@ -366,7 +375,7 @@ public:
         if (k == "state")
             return writeText(buf, len, saveState());
         if (const int b = indexed(k, "btn_", kButtons); b >= 0)
-            return num(b == grab.button ? 1.0 : 0.0);
+            return num(b == grab.button && !grab.releasing ? 1.0 : 0.0);
         if (indexed(k, "lock_", kButtons) >= 0)
             return num(0.0);
         if (const int l = indexed(k, "led_", kButtons); l >= 0)
@@ -427,21 +436,40 @@ public:
             return;
         }
         const bool isPlaying = playing != 0 && ppq >= 0.0 && bpm > 0.0;
-        const bool started = isPlaying && (!wasPlaying || ppq + 1e-6 < lastPpq);   // or the MPC jumped back (a loop)
+        const double framesPerBeat = isPlaying ? 60.0 / bpm * VOLT_SAMPLE_RATE : 1.0;
+        // The clock runs on its own position, at the MPC's tempo: the MPC's
+        // position wobbles from block to block, and a clock following it would
+        // send ticks twice or skip them. It is pulled gently towards the MPC's.
+        // As a hardware LXR on the MPC's clock (and the firmware has no song
+        // position), PLAY starts it from its first step and it plays on through
+        // the MPC's loops and locates: the clock moves with them, unbroken.
+        const bool started = isPlaying && !wasPlaying;
+        if (isPlaying && wasPlaying)
+        {
+            if (const double off = ppq - clockPpq; std::fabs(off) > kClockJump)
+            {
+                const long long ticks = std::llround(off * 24.0);
+                nextTick += ticks;
+                clockPpq += static_cast<double>(ticks) / 24.0;
+            }
+            clockPpq += (ppq - clockPpq) * kClockPull;
+        }
         if (started)
+        {
             sendAt(0xFA, 0);
+            clockPpq = ppq;
+            nextTick = static_cast<long long>(std::ceil(ppq * 24.0 - 1e-9));
+        }
         if (!isPlaying && wasPlaying)
             sendAt(0xFC, 0);
         if (isPlaying)
         {
-            const double framesPerBeat = 60.0 / bpm * VOLT_SAMPLE_RATE;
-            const double lead = clockLead / framesPerBeat;   // in beats
-            // the ticks that sound in [ppq + lead, ppq + lead + frames); on a start, also
-            // those before, which can only come now
-            const double from = started ? ppq : ppq + lead, to = ppq + lead + frames / framesPerBeat;
-            for (double tick = std::ceil(from * 24.0 - 1e-9); tick / 24.0 < to; tick += 1.0)
-                sendAt(0xF8, static_cast<int>(std::lround((tick / 24.0 - ppq - lead) * framesPerBeat)));
-            lastPpq = ppq;
+            // the ticks that sound by the block's end, `clockLead` frames early (a
+            // start's first ones can only come now)
+            const double lead = clockLead / framesPerBeat, to = clockPpq + lead + frames / framesPerBeat;
+            for (; static_cast<double>(nextTick) / 24.0 < to; ++nextTick)
+                sendAt(0xF8, static_cast<int>(std::lround((static_cast<double>(nextTick) / 24.0 - clockPpq - lead) * framesPerBeat)));
+            clockPpq += frames / framesPerBeat;
         }
         wasPlaying = isPlaying;
     }
@@ -452,18 +480,7 @@ public:
             return;
         const float gain = static_cast<float>(std::pow(10.0, masterDb / 20.0));
         framesRendered += frames;
-        if (grab.button >= 0 && framesRendered >= grab.armedAt)
-            for (int i = 0; i < VOLT_KNOBS; ++i)
-                if (grab.waiting[static_cast<std::size_t>(i)] >= 0 && machine)
-                {
-                    // where it was turned, on the parameter shown now
-                    VoltKnob info;
-                    if (machine->knob(i, &info))
-                        machine->knob_to(i, static_cast<int>(std::lround(
-                                                info.min + grab.waiting[static_cast<std::size_t>(i)] * (info.max - info.min))));
-                    grab.waiting[static_cast<std::size_t>(i)] = -1;
-                    knobs[static_cast<std::size_t>(i)].sentAt = Clock::now();
-                }
+        serviceGrab();
         float l[kMaxFrames], r[kMaxFrames];
         for (int done = 0; done < frames;)
         {
@@ -525,9 +542,26 @@ public:
     }
 
 private:
+    // every key change sent to the firmware (VOLTKIT_KEYLOG: printed, with the time)
+    void keyTap(const int b)
+    {
+        if (keyLog)
+            std::fprintf(stderr, "%8.3f tap %d\n", framesRendered / double(VOLT_SAMPLE_RATE), b);
+        machine->tap(b);
+    }
+
+    void keySet(const int b, const int down)
+    {
+        if (keyLog)
+            std::fprintf(stderr, "%8.3f key %d %s\n", framesRendered / double(VOLT_SAMPLE_RATE), b, down ? "down" : "up");
+        machine->key(b, down);
+    }
+
     void sendAt(const std::uint8_t byte, const int frame)
     {
         machine->midi_at(&byte, 1, std::max(frame, 0));
+        if (byte != 0xF8)
+            logMidi(&byte, 1);   // starts and stops, in the log a save writes
     }
 
     // What a knob shows: the firmware's parameter under it, or, while it is
@@ -545,7 +579,10 @@ private:
     {
         int button = -1;            // the step key held for a lock, or -1
         long long guardUntil = 0;   // frames: the double tap's own late taps and echoes
-        long long armedAt = 0;      // frames: when the firmware will have armed the lock
+        long long heldAt = 0;       // frames: when the step was last put down (arming since)
+        bool releasing = false;     // let go: once armed
+        int rearming = 0;           // lifted and held again: 1 until seen let go, 2 until armed again
+        std::vector<int> pending;   // keys tapped meanwhile: once armed, with the step lifted
         std::array<double, VOLT_KNOBS> waiting { -1, -1, -1, -1 };   // knob positions held back until then
     };
 
@@ -622,56 +659,132 @@ private:
         if (b == grab.button)
         {
             if (framesRendered < grab.guardUntil)
-                return;   // the double tap's own second tap, arriving late
-            letGo();
+                return;   // the echo of the key shown lit
+            grab.releasing = true;   // let go once armed (serviceGrab)
+            changed.insert(indexedKey("btn_", b));
+            serviceGrab();
             return;
         }
         if (grab.button >= 0)
         {
-            // the step lifted, the key tapped, the step held again (its lock re-arms)
-            machine->key(grab.button, 0);
-            machine->tap(b);
-            machine->key(grab.button, 1);
-            grab.armedAt = framesRendered + kArmFrames;
+            grab.pending.push_back(b);   // tapped with the step lifted, once armed (serviceGrab)
+            taps[i].push_back(framesRendered);   // half of a double tap, maybe
+            serviceGrab();
             return;
         }
-        machine->tap(b);
+        keyTap(b);
         taps[i].push_back(framesRendered);
     }
 
-    // A double tap on a step key: its two taps toggled the step twice, unless
-    // one came too soon after the other to count; then hold it down.
+    // A double tap on a step key: its two taps toggled the step twice (only
+    // they count: an earlier tap was meant), unless one of them didn't reach
+    // the firmware; then hold it down.
     void grabStep(const int b)
     {
         if (!machine || b == grab.button)
             return;
         if (grab.button >= 0)
-            letGo();
+            letGoNow();
+        if (!machine->lockable())
+            return;   // PERF (a held step rolls), step mode, SHIFT: two taps, as they came
         const auto i = static_cast<std::size_t>(b);
         auto& t = taps[i];
         t.erase(std::remove_if(t.begin(), t.end(), [&](const long long at) { return framesRendered - at > kDoubleTap; }),
                 t.end());
-        if (t.size() % 2 == 1)
-            machine->tap(b);   // back as it was before the double tap
+        if (t.size() == 1)
+            keyTap(b);   // back as it was before the double tap
         t.clear();
         setHeld(b, true);
         grab = Grab {};
         grab.button = b;
         grab.guardUntil = framesRendered + kGrabTapGuard;
-        grab.armedAt = framesRendered + kArmFrames;
+        grab.heldAt = framesRendered;
         changed.insert(indexedKey("btn_", b));   // lit
     }
 
-    void letGo()
+    // The firmware has armed the held step's lock (or never will). Held again
+    // around a page key, it is armed again only once the release queued before
+    // that has reached it (the lock read let go) and the new hold has armed.
+    bool grabArmed()
+    {
+        if (!machine)
+            return false;
+        if (framesRendered - grab.heldAt > kArmTimeout)
+            return true;
+        if (grab.rearming == 1 && !machine->lock_armed())
+            grab.rearming = 2;
+        return grab.rearming != 1 && machine->lock_armed();
+    }
+
+    static bool isPageKey(const int b) { return (b >= 8 && b <= 11) || (b >= 16 && b <= 19); }
+
+    // What waits for the held step's lock to be armed: keys tapped meanwhile and
+    // the let-go (the step lifted first: on the LXR a key pressed with a step
+    // held edits its sub-steps), then knob turns (locks).
+    void serviceGrab()
+    {
+        if (grab.button < 0 || !grabArmed())
+            return;
+        if (!grab.pending.empty() || grab.releasing)
+        {
+            const int b = grab.button;
+            const bool armed = machine->lock_armed();
+            if (keyLog)
+                std::fprintf(stderr, "%8.3f lift %d: armed %d, rearming %d, held %.3f\n", framesRendered / double(VOLT_SAMPLE_RATE),
+                             b, armed, grab.rearming, grab.heldAt / double(VOLT_SAMPLE_RATE));
+            setHeld(b, false);
+            if (!armed)
+                keyTap(b);   // it never armed: that release toggled the step, back
+            bool pages = true;
+            for (const int k : grab.pending)
+            {
+                keyTap(k);
+                pages = pages && isPageKey(k);
+            }
+            const bool again = pages && !grab.releasing;
+            const auto waiting = grab.waiting;
+            grab = Grab {};
+            if (again)
+            {
+                // a page key: held again, for the locks on the page it opens
+                setHeld(b, true);
+                grab.button = b;
+                grab.heldAt = framesRendered;
+                grab.rearming = 1;
+                grab.waiting = waiting;
+            }
+            changed.insert(indexedKey("btn_", b));
+            return;
+        }
+        for (int i = 0; i < VOLT_KNOBS; ++i)
+            if (grab.waiting[static_cast<std::size_t>(i)] >= 0)
+            {
+                // where it was turned, on the parameter shown now
+                VoltKnob info;
+                if (machine->knob(i, &info))
+                    machine->knob_to(i, static_cast<int>(std::lround(
+                                            info.min + grab.waiting[static_cast<std::size_t>(i)] * (info.max - info.min))));
+                grab.waiting[static_cast<std::size_t>(i)] = -1;
+                knobs[static_cast<std::size_t>(i)].sentAt = Clock::now();
+            }
+    }
+
+    // Lifts the held step now (another step grabbed). Armed, the firmware ends
+    // its lock and leaves the step as it was; not armed, that release toggled
+    // it: undone. Keys tapped meanwhile still reach it.
+    void letGoNow()
     {
         if (grab.button < 0)
             return;
         const int b = grab.button;
-        const bool armed = framesRendered >= grab.armedAt;
-        grab.button = -1;
+        const bool armed = machine && machine->lock_armed();
+        const auto pending = grab.pending;
+        grab = Grab {};
         setHeld(b, false);
         if (!armed && machine)
-            machine->tap(b);   // let go before the lock armed: that release toggled the step
+            keyTap(b);
+        for (const int k : pending)
+            keyTap(k);
         changed.insert(indexedKey("btn_", b));
     }
 
@@ -682,18 +795,19 @@ private:
             return;
         down[i] = isDown;
         if (machine)
-            machine->key(b, isDown ? 1 : 0);
+            keySet(b, isDown ? 1 : 0);
         if (b == kShiftButton)
             changed.insert("shift");
     }
 
+    // A skin key's tap sets its parameter twice (its Mouse Down and its Button
+    // both flip it): the second, within debounceMs of audio, is the same tap.
     bool bouncing(const std::string& key)
     {
-        const auto now = Clock::now();
         const auto it = lastPress.find(key);
-        if (it != lastPress.end() && now - it->second < std::chrono::milliseconds(debounceMs))
+        if (it != lastPress.end() && framesRendered - it->second < static_cast<long long>(debounceMs) * VOLT_SAMPLE_RATE / 1000)
             return true;
-        lastPress[key] = now;
+        lastPress[key] = framesRendered;
         return false;
     }
 
@@ -708,7 +822,7 @@ private:
         const int target = static_cast<int>(std::lround(info.min + std::clamp(v, 0.0, 1.0) * (info.max - info.min)));
         if (target == info.value && !kn.turning)
             return;   // the host reading back what it was shown
-        if (grab.button >= 0 && framesRendered < grab.armedAt)
+        if (grab.button >= 0 && (!grabArmed() || !grab.pending.empty()))
             grab.waiting[static_cast<std::size_t>(i)] = std::clamp(v, 0.0, 1.0);   // locks once the step is armed
         else
             machine->knob_to(i, target);
@@ -864,7 +978,7 @@ private:
             return;
         if (padMode == 1 && machine)   // steps held by pads let go
             for (const int b : kStepButtons)
-                machine->key(b, 0);
+                keySet(b, 0);
         padMode = mode;
         learning = false;
         changed.insert("pad_mode");
@@ -911,7 +1025,7 @@ private:
 
     std::string midiLogText() const
     {
-        std::string s = "# the MIDI VOLTKIT received last: seconds of audio rendered, bytes\n";
+        std::string s = "# the MIDI VOLTKIT received last, and the starts (FA) and stops (FC) it gave the LXR: seconds of audio rendered, bytes\n";
         const std::size_t n = std::min<std::size_t>(midiLogNext, midiLog.size());
         for (std::size_t k = midiLogNext - n; k < midiLogNext; ++k)
         {
@@ -1059,7 +1173,8 @@ private:
 
     bool sync = true;
     bool wasPlaying = false;
-    double lastPpq = 0.0;
+    double clockPpq = 0.0;     // where the clock is, in beats
+    long long nextTick = 0;    // the next MIDI clock tick (24 a beat) to send
     // VOLTKIT_CLOCK_LEAD (frames): another lead, for measuring it.
     const int clockLead = std::getenv("VOLTKIT_CLOCK_LEAD") ? std::atoi(std::getenv("VOLTKIT_CLOCK_LEAD")) : kClockLead;
 
@@ -1075,9 +1190,10 @@ private:
     std::set<std::string> changed;   // keys to report to MPC (mpc_engine_changed)
 
     std::optional<Clock::time_point> lastSuspend;
-    std::map<std::string, Clock::time_point> lastPress;
+    std::map<std::string, long long> lastPress;   // frames rendered at each key's last press
     // VOLTKIT_DEBOUNCE_MS, VOLTKIT_RECENTRE_MS: the offline test turns them off.
     const int debounceMs = std::getenv("VOLTKIT_DEBOUNCE_MS") ? std::atoi(std::getenv("VOLTKIT_DEBOUNCE_MS")) : kDebounceMs;
+    const bool keyLog = std::getenv("VOLTKIT_KEYLOG") != nullptr;
     const int recentreMs = std::getenv("VOLTKIT_RECENTRE_MS") ? std::atoi(std::getenv("VOLTKIT_RECENTRE_MS")) : kRecentreMs;
 
     struct MidiLogEntry

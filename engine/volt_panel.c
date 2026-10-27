@@ -9,6 +9,7 @@
 #include "volt_machine.h"
 
 #include "menu/menu.h"
+#include "buttonHandler.h"
 #include "ff.h"
 
 uint8_t limitPotValue(int8_t diff, uint16_t paramNr);   /* menu.c (VOLTKIT: not static) */
@@ -57,4 +58,18 @@ void volt_panel_flush(void)
     preset_saveTmpPat();
     preset_kitDirty = 0;
     preset_saveTmpKit();
+}
+
+/* Whether holding a step key now would arm a lock: voice mode (in PERF a held
+   step rolls a voice, in step mode it selects a step), no SHIFT, LOAD or SAVE. */
+int volt_panel_lockable(void)
+{
+    return buttonHandler_getMode() == SELECT_MODE_VOICE && !buttonHandler_getShift() && !buttonHandler_getLoad() &&
+           !buttonHandler_getSave();
+}
+
+/* Whether a held step's lock is armed: its LED blinks, and knobs now lock to it. */
+int volt_panel_lock_armed(void)
+{
+    return buttonHandler_getArmedAutomationStep() != NO_STEP_SELECTED;
 }

@@ -17,8 +17,10 @@ int mpc_engine_changed(void* inst, char* key, int len);
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <random>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace
@@ -49,6 +51,9 @@ struct Track
     std::set<std::string> seen;   // changed keys reported
     std::vector<float> audio;     // the left channel, when recording
     bool recording = false;
+    double jitter = 0.0;          // beats the reported position wobbles by, either way
+    double loop = 0.0;            // beats the MPC's sequence loops after, if set
+    std::mt19937 wobble { 7 };
 
     Track() { inst = E->create(dataDir.c_str()); }
     ~Track() { E->destroy(inst); }
@@ -72,10 +77,13 @@ struct Track
         std::int16_t out[kBlock * 2];
         for (int b = 0; b < blocks; ++b)
         {
-            E->song_pos(inst, ppq, bpm, playing ? 1 : 0, kBlock);
+            const double off = jitter * (std::uniform_real_distribution<double>(-1.0, 1.0)(wobble));
+            E->song_pos(inst, std::fmax(ppq + off, 0.0), bpm, playing ? 1 : 0, kBlock);
             E->render(inst, out, kBlock);
             if (playing)
                 ppq += kBlock / (60.0 / bpm * kRate);
+            if (loop > 0.0 && ppq >= loop)
+                ppq -= loop;
             for (const std::int16_t s : out)
                 peak = std::fmax(peak, std::abs(s) / 32768.0);
             if (recording)
@@ -266,8 +274,13 @@ int main()
     std::printf("transport: %.3f stopped, step 1 %.3f, %.3f after stop\n", idle, t.level(0.0), stopped);
     CHECK(idle < 0.01 && t.level(0.0) > 0.05 && stopped < 0.01);
     CHECK(std::abs(t.crossings(0.0) - t.crossings(0.5)) <= 2);
+    for (const auto [jitter, loop] : { std::pair { 0.0, 0.0 }, { 0.004, 0.0 }, { 0.004, 8.0 } })
     {
-        // in time: eight bars, every hit against its step
+        // in time: eight bars, every hit against its step; again with the MPC's
+        // position wobbling by up to 1 ms (0.004 beats) either way, and looping
+        // two bars
+        t.jitter = jitter;
+        t.loop = loop;
         t.playing = true;
         t.ppq = 0.0;
         t.recording = true;
@@ -285,7 +298,9 @@ int main()
             sum += d[i];
         }
         const double mean = d.size() > 2 ? sum / (d.size() - 2) : 0.0;
-        std::printf("timing: %zu hits, %.2f ms on average from the step, %.2f to %.2f\n", d.size(), mean, lo, hi);
+        t.jitter = t.loop = 0.0;
+        std::printf("timing%s%s: %zu hits, %.2f ms on average from the step, %.2f to %.2f\n",
+                    jitter > 0 ? " (wobbling)" : "", loop > 0 ? " (looping)" : "", d.size(), mean, lo, hi);
         CHECK(d.size() >= 32);
         CHECK(std::fabs(mean) < 1.0 && hi - lo < 1.6);
     }
@@ -346,6 +361,32 @@ int main()
     t.set("btn_37", 1.0);
     t.run(0.1);
     CHECK(!t.led(37) && t.num("btn_37") == 0.0);
+    // in PERF a held step key rolls its voice (recording it with REC on): a double
+    // tap on step 6 there is two taps, CL HH's roll, never a hold
+    t.set("btn_25", 1.0);   // PERF
+    t.set("btn_34", 1.0);   // REC
+    t.playing = true;
+    t.ppq = 0.0;
+    t.run(0.3);
+    t.set("btn_30", 1.0);
+    t.run(0.1);
+    t.set("btn_30", 1.0);
+    t.set("lock_30", 1.0);
+    t.run(2.0);
+    CHECK(t.num("btn_30") == 0.0);
+    t.playing = false;
+    t.set("btn_34", 1.0);
+    t.set("btn_24", 1.0);   // VOICE
+    t.run(0.3);
+    t.set("btn_06", 1.0);   // CL HH: what the two taps recorded, at most
+    t.run(0.05);
+    int clhh = 0;
+    for (const int l : { 39, 38, 37, 36, 31, 30, 29, 28, 23, 22, 21, 20, 15, 14, 13, 12 })
+        clhh += t.led(l) ? 1 : 0;
+    std::printf("perf double tap: CL HH %d steps\n", clhh);
+    CHECK(clhh <= 2);
+    t.set("btn_01", 1.0);
+    t.run(0.05);
 
     // a lock with the pads as step keys: pad 9 held, the knob turned, let go
     t.set("pad_mode", 1.0);

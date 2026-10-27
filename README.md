@@ -39,18 +39,23 @@ tracks) or **STEPS** (they are the 16 step keys, held as long as a pad is).
 - **Pads** play the voices, or in STEPS are the step keys.
 - **Locks**: as on the LXR, a step held for half a second (its LED blinks)
   takes what the knobs and Q-Links do (two parameters a step, as on the LXR).
-  On the screen, double-tap the step's key: it lights up and stays held until
-  you tap it again; change pages meanwhile and lock there too (VOLTKIT lets
-  go of the step around the page key and holds it again, since on the LXR a
-  page key pressed with a step held edits its sub-steps). Or hold the step's
+  On the screen, double-tap the step's key (in VOICE mode; in PERF a held step
+  rolls a voice, so there a double tap is two taps): it lights up and stays
+  held until you tap it again; change pages meanwhile and lock there too
+  (VOLTKIT lets go of the step around the page key and holds it again, since
+  on the LXR a page key pressed with a step held edits its sub-steps). Any
+  other key lets go of it. Or hold the step's
   pad (STEPS). A voice keeps the last lock it played until its next step. The screen can't hold a key itself:
   MPC tells a plug-in's skin when a finger touches, double-taps or presses
   ENTER, never when it lifts.
 - **Recording**: REC on the panel, PLAY on the MPC, and play the pads.
 - **Sync**: with MPC SYNC on (the default), the MPC's tempo, PLAY and STOP run
   the LXR's sequencer (MIDI clock, start and stop; the card's tempo is set to
-  MID, MIDI clock). Off, set a tempo on the PERF page. **STOP twice** stops
-  the LXR.
+  MID, MIDI clock). As a hardware LXR on the MPC's clock, PLAY starts it from
+  its first step and it plays on through the MPC's loops (the firmware has no
+  song position). The clock keeps its own steady time at the MPC's tempo, so
+  the MPC's position wobbling from block to block doesn't reach it. Off, set a
+  tempo on the PERF page. **STOP twice** stops the LXR.
 - **Saving**: each track keeps its own LXR SD card, compressed, inside the MPC
   project: its kits, patterns, songs and settings, with whatever you saved on
   the LXR (SAVE) and what it autosaves. New tracks start from the firmware's
@@ -122,6 +127,8 @@ build-host/voltkit-machine-test card.img   # the machine: boot, voices, keys, kn
 VOLTKIT_ENGINE=$PWD/build-host/libvoltkit-engine.dylib VOLTKIT_CARD=data/card.vkc \
     build-host/voltkit-adapter-test        # the plug-in as the wrapper drives it: pads,
                                            # locks, recording, the sequencer on the MPC's clock
+VOLTKIT_ENGINE=$PWD/build-host/libvoltkit-engine.dylib VOLTKIT_CARD=data/card.vkc \
+    build-host/voltkit-stress-test 80      # random playing: taps, locks, pages, modes, transport
 ```
 
 `mpc/build.sh` also cross-builds both for the MPC (`mpc/build/aarch64/`).
