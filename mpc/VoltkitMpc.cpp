@@ -1,10 +1,21 @@
-// MPC OS (Open MPC VST2 wrapper) engine for VOLTKIT.
+// MPC OS (Open MPC VST2 wrapper) engine for VOLTKIT: the whole LXR-02
+// (engine/volt_machine.h) behind the MPC's touchscreen.
 //
-// Each instance loads its own copy of the LXR firmware engine
-// (EngineLoader.*) and maps the plug-in's parameters (Controls.inc, from
-// gen_controls.py) onto the firmware's. The wrapper calls this one call at a
-// time per instance, under its own lock: set_param and get_param from MPC's
-// screen thread, midi, song_pos and render from the audio thread.
+// The panel's controls are parameters (mpc/gen_layout.py):
+//   btn_00..btn_40   the panel keys (the firmware's button numbers; 40 = PAGE DOWN):
+//                    a tap presses one and lets go after kTapFrames
+//   shift, hold      SHIFT latched; HOLD keeps the next key tapped held down
+//                    until it is tapped again (for the LXR's key combinations)
+//   knob1..knob4     the four endless knobs; enc the encoder, enc_push its push
+//   fader1..fader6   the six faders; master the output level
+//   sync             MIDI clock, start and stop from the MPC's transport (the
+//                    card's tempo is MID for it; off, set a tempo on the LXR)
+//   led_00..led_40   the keys' LEDs, lcd_00..lcd_31 the 2x16 display's
+//                    characters: shown, never set (the engine reports them)
+//
+// Each instance runs its own copy of the engine library (EngineLoader.h): the
+// firmware keeps its state in globals. The wrapper calls this one call at a
+// time per instance, under its own lock.
 //
 // Copyright (C) 2026 Jason Rold. GPL-3.0-only.
 
@@ -12,109 +23,51 @@ extern "C" {
 #include "engine.h"
 }
 
+#include "CardCodec.h"
 #include "EngineLoader.h"
-#include "FirmwareParams.h"
 
 #include <algorithm>
 #include <array>
-#include <atomic>
+#include <cctype>
 #include <chrono>
 #include <cmath>
-#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <map>
-#include <mutex>
+#include <memory>
 #include <optional>
+#include <set>
+#include <sstream>
 #include <string>
-#include <thread>
-#include <unordered_map>
 #include <vector>
 
 namespace
 {
+using namespace voltkit;
 
-constexpr int kMaxFrames = 128;                 // wrapper/engine.h: render() gets 1..128 frames
-constexpr const char* kPadMapFile = "padmap.txt";
+constexpr int kSubBlock = 64;                   // the firmware's own block
+constexpr int kTapFrames = 2646;                // a tapped key is held 60 ms (the firmware scans every few ms)
+constexpr int kDebounceMs = 150;                // a skin key fires its press twice
 constexpr auto kDoubleStopWindow = std::chrono::milliseconds(1200);
-constexpr int kDebounceMs = 350;
-constexpr int kPads = 7;                        // D1, D2, D3, SN, CY, CH, OH
-constexpr int kFxTypes = 5;                     // off, drive, ring, comp, delay
+constexpr int kButtons = VOLT_BUTTONS;          // 41
+constexpr int kShiftButton = 32;                // BUT_SHIFT
+constexpr int kLcdCells = 32;
+constexpr double kKnobDegreesPerUnit = 512.0;   // a Q-Link click (1/128) turns a knob 4 degrees
+constexpr double kKnobStep = 3.0;               // at most this many degrees per firmware block: each step registers
+constexpr double kEncoderDetentsPerUnit = 128.0;
+constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 
-// The firmware's parameters VOLTKIT touches outside Controls.inc (P1..P4,
-// and LFO 1..6, follow one another).
-constexpr int kParFxP1 = kParFxP1_;
-constexpr int kParFxType = kParFxType_;
-constexpr int kParFxDryWet = kParFxDryWet_;
-constexpr int kParVoiceLfo1 = kParVoiceLfo1_;
-constexpr int kParTargetLfo1 = kParTargetLfo1_;
-constexpr int kAudioOutFx = 6;                  // outputNames: "FX"
-
-// Pad slots, in PAD LEARN order, and the engine voice each one plays.
-constexpr std::array<const char*, kPads> kPadName { "DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT", "OPEN HAT" };
-constexpr std::array<const char*, kPads> kPadShort { "D1", "D2", "D3", "SN", "CY", "CH", "OH" };
-
-// Pads play these notes unless PAD LEARN has mapped others: General MIDI
-// drum notes, a few per voice, so most pad layouts reach every voice.
-const std::map<int, int> kDefaultNotes {
-    { 35, 0 }, { 36, 0 },
-    { 41, 1 }, { 43, 1 }, { 45, 1 },
-    { 47, 2 }, { 48, 2 }, { 50, 2 },
-    { 37, 3 }, { 38, 3 }, { 39, 3 }, { 40, 3 },
-    { 49, 4 }, { 51, 4 }, { 52, 4 }, { 55, 4 }, { 57, 4 },
-    { 42, 5 }, { 44, 5 },
-    { 46, 6 },
-};
-
-constexpr int kDefaultNote = 60;   // the firmware's SEQ_DEFAULT_NOTE: the kit's own pitch
-
-enum class Kind
-{
-    page, knob, pm60, pm63, menu, out, veldest, lfovoice, lfodest, fxp, master, learn, padsClear, initKit, padsInfo
-};
-
-struct Control
-{
-    const char* key;
-    int par;      // firmware parameter, -1 for none
-    Kind kind;
-    int voice;    // 1..6; for fxp the effect (1..4)
-};
-
-const Control kControls[] = {
-#include "Controls.inc"
-};
-
-struct Targets
-{
-    int lo, hi;   // this voice's range in the firmware's modTargets
-    std::vector<const char*> names;
-};
-
-const Targets kTargets[6] = {
-#include "Targets.inc"
-};
-
-int parseInt(const char* text, const int fallback)
+double parseDouble(const char* text, const double fallback)
 {
     if (text == nullptr || *text == '\0')
         return fallback;
     char* end = nullptr;
     const double v = std::strtod(text, &end);
-    return end == text || !std::isfinite(v) ? fallback : static_cast<int>(std::lround(v));
-}
-
-float parseFloat(const char* text, const float fallback)
-{
-    if (text == nullptr || *text == '\0')
-        return fallback;
-    char* end = nullptr;
-    const double v = std::strtod(text, &end);
-    return end == text || !std::isfinite(v) ? fallback : static_cast<float>(v);
+    return end == text || !std::isfinite(v) ? fallback : v;
 }
 
 int writeText(char* buf, const int len, const std::string& text)
@@ -127,109 +80,84 @@ int writeText(char* buf, const int len, const std::string& text)
     return n;
 }
 
-std::string signedText(const int v)
+std::string formatNum(const double v, const int decimals = 4)
 {
-    return v > 0 ? "+" + std::to_string(v) : std::to_string(v);
+    char b[48];
+    std::snprintf(b, sizeof b, "%.*f", decimals, v);
+    return b;
 }
 
-std::string noteName(const int note)
+// "btn_07" -> 7 for a key with that prefix and a two-digit index below `count`; else -1.
+int indexed(const std::string& key, const char* prefix, const int count)
 {
-    static const char* const names[12] = { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
-    return std::string(names[((note % 12) + 12) % 12]) + std::to_string(note / 12 - 2);   // MPC: 60 = C3
+    const std::size_t n = std::strlen(prefix);
+    if (key.size() != n + 2 || key.compare(0, n, prefix) != 0 || !std::isdigit(static_cast<unsigned char>(key[n]))
+        || !std::isdigit(static_cast<unsigned char>(key[n + 1])))
+        return -1;
+    const int i = (key[n] - '0') * 10 + (key[n + 1] - '0');
+    return i < count ? i : -1;
 }
 
-const std::unordered_map<std::string, const Control*>& controlsByKey()
+std::string indexedKey(const char* prefix, const int i)
 {
-    static const auto map = [] {
-        std::unordered_map<std::string, const Control*> m;
-        for (const auto& c : kControls)
-            m.emplace(c.key, &c);
-        return m;
-    }();
-    return map;
+    char b[16];
+    std::snprintf(b, sizeof b, "%s%02d", prefix, i);
+    return b;
+}
+
+// "fader3" -> 2 for prefix "fader" and digits 1..count; else -1.
+int numbered(const std::string& key, const char* prefix, const int count)
+{
+    const std::size_t n = std::strlen(prefix);
+    if (key.size() != n + 1 || key.compare(0, n, prefix) != 0)
+        return -1;
+    const int i = key[n] - '1';
+    return i >= 0 && i < count ? i : -1;
+}
+
+// An endless knob's two wipers at `deg`: triangle tracks 90 degrees apart, as
+// the firmware's adcPots.c reads them (raw 16-bit ADC readings).
+std::array<int, 2> wipers(const double deg)
+{
+    const double t = std::fmod(std::fmod(deg, 360.0) + 360.0, 360.0);
+    const double b = t <= 180.0 ? t : 360.0 - t;
+    const double a = t <= 90.0 ? 90.0 + t : t <= 270.0 ? 270.0 - t : t - 270.0;
+    const auto raw = [](const double d) { return static_cast<int>(std::lround(d / 180.0 * 0xFFF)) << 4; };
+    return { raw(a), raw(b) };
+}
+
+int faderRaw(const double v)
+{
+    return static_cast<int>(std::lround(v * 0xFFF)) << 4;
+}
+
+std::int16_t toPcm(const float v)
+{
+    return static_cast<std::int16_t>(std::lround(std::clamp(v, -1.0f, 1.0f) * 32767.0f));
 }
 
 class Instance
 {
 public:
-    explicit Instance(const char* dataDir)
+    explicit Instance(const char*)
     {
-        learnedNotes.reserve(kPads);   // learned on the audio thread: no allocation there
-        const char* override = std::getenv("VOLTKIT_ENGINE");
-        if (engineCopy.load(override && *override ? override : voltkit::defaultEnginePath()))
-        {
-            engine = engineCopy.api();
-            engine->init();
-        }
-        else
-        {
-            std::fprintf(stderr, "VOLTKIT: %s\n", engineCopy.error().c_str());
-        }
-        captureFxValues();
-        if (dataDir != nullptr && *dataDir != '\0')
-        {
-            pluginData = dataDir;
-            std::ifstream in(std::filesystem::path(dataDir) / kPadMapFile);
-            std::vector<int> notes;
-            for (int n; in >> n && notes.size() < static_cast<std::size_t>(kPads);)
-                notes.push_back(n);
-            learnedNotes.assign(notes.begin(), notes.end());
-        }
-        saver = std::thread([this] { saveLoop(); });
-    }
-
-    ~Instance()
-    {
-        {
-            std::scoped_lock lock(saverMutex);
-            quit = true;
-        }
-        saverCv.notify_all();
-        saver.join();
+        // the default card ships beside the engine (VOLTKIT_CARD: another one)
+        const char* forced = std::getenv("VOLTKIT_CARD");
+        const auto path = forced != nullptr && *forced != '\0'
+                              ? std::filesystem::path(forced)
+                              : std::filesystem::path(defaultEnginePath()).parent_path() / kCardFile;
+        std::ifstream in(path, std::ios::binary);
+        defaultCard.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        start(defaultCard);
     }
 
     Instance(const Instance&) = delete;
     Instance& operator=(const Instance&) = delete;
 
-    // ---- wrapper calls ----
-
     void midi(const std::uint8_t* msg, const int len)
     {
-        if (msg == nullptr || len < 1)
-            return;
-        const auto status = msg[0] & 0xF0;
-        const int d1 = len > 1 ? msg[1] & 0x7F : 0;
-        const int d2 = len > 2 ? msg[2] & 0x7F : 0;
-        if (status == 0x90 && d2 > 0)
-        {
-            // PAD LEARN: each new note becomes the next pad slot, D1 to OH.
-            if (learning && std::find(learnedNotes.begin(), learnedNotes.end(), d1) == learnedNotes.end())
-            {
-                learnedNotes.push_back(d1);
-                changed.push_back("learn");
-                if (static_cast<int>(learnedNotes.size()) == kPads)
-                {
-                    learning = false;
-                    for (int i = 0; i < kPads; ++i)
-                        toSave[static_cast<std::size_t>(i)] = learnedNotes[static_cast<std::size_t>(i)];
-                    savePending.store(true, std::memory_order_release);
-                }
-            }
-            const int slot = slotFor(d1);
-            if (slot >= 0 && engine)
-                engine->trigger(slot, kDefaultNote, d2);
-        }
-        else if (status == 0xB0 && (d1 == 120 || d1 == 123))
-        {
-            if (engine)
-                engine->all_off();
-        }
-    }
-
-    void songPos(const double bpm, const int playing)
-    {
-        if (engine)
-            engine->set_tempo(bpm > 0 ? static_cast<float>(bpm) : 0.0f, playing);
+        if (msg != nullptr && len > 0 && machine)
+            machine->midi(msg, len);   // the pads and anything else: the LXR's DIN MIDI input
     }
 
     void setParam(const char* key, const char* val)
@@ -239,80 +167,172 @@ public:
         const std::string k(key);
         if (k == "state")
         {
-            restoreState(val != nullptr ? val : "");
+            restore(val != nullptr ? val : "");
             return;
         }
-        const int v = parseInt(val, 0);
+        const double v = parseDouble(val, 0.0);
         if (k == "mains")
         {
-            // MPC suspends and resumes plug-ins on every STOP press (our patched
-            // wrapper passes it on): two close together stop all sound.
-            if (v == 0)
+            // MPC suspends and resumes its plug-ins on every STOP press (our
+            // patched wrapper passes it on): two close together stop the LXR.
+            if (v == 0.0)
             {
                 const auto now = std::chrono::steady_clock::now();
-                if (lastSuspend && now - *lastSuspend < kDoubleStopWindow && engine)
-                    engine->all_off();
+                if (lastSuspend && now - *lastSuspend < kDoubleStopWindow && machine)
+                {
+                    const std::uint8_t stop = 0xFC;
+                    machine->midi(&stop, 1);
+                }
                 lastSuspend = now;
             }
             return;
         }
-        const auto& map = controlsByKey();
-        const auto it = map.find(k);
-        if (it == map.end())
+        if (const int b = indexed(k, "btn_", kButtons); b >= 0)
+        {
+            if (v != 0.0)
+                tapKey(b);
+            return;   // the release is ours (kTapFrames), not the wrapper's
+        }
+        if (k == "shift")
+        {
+            setHeld(kShiftButton, v != 0.0);
             return;
-        apply(*it->second, v, val);
+        }
+        if (k == "hold")
+        {
+            holdNext = v != 0.0;
+            return;
+        }
+        if (const int i = numbered(k, "knob", 4); i >= 0)
+        {
+            knobs[static_cast<std::size_t>(i)].target += (v - 0.5) * kKnobDegreesPerUnit;
+            changed.insert(k);   // back to centre: the knob is endless
+            return;
+        }
+        if (k == "enc")
+        {
+            encoderRest += (v - 0.5) * kEncoderDetentsPerUnit;
+            const int detents = static_cast<int>(encoderRest);
+            encoderRest -= detents;
+            if (detents != 0 && machine)
+                machine->encoder(detents);
+            changed.insert(k);
+            return;
+        }
+        if (k == "enc_push")
+        {
+            if (v != 0.0 && machine && !bouncing(k))
+            {
+                machine->encoder_button(1);
+                encoderRelease = kTapFrames;
+            }
+            return;
+        }
+        if (const int i = numbered(k, "fader", VOLT_ADC_FADERS); i >= 0)
+        {
+            faders[static_cast<std::size_t>(i)] = std::clamp(v, 0.0, 1.0);
+            if (machine)
+                machine->adc(VOLT_ADC_KNOBS + i, faderRaw(faders[static_cast<std::size_t>(i)]));
+            return;
+        }
+        if (k == "master")
+            masterDb = std::clamp(v, -24.0, 6.0);
+        else if (k == "sync")
+            sync = v != 0.0;
     }
 
     int getParam(const char* key, char* buf, const int len)
     {
         if (key == nullptr)
             return 0;
-        std::string k(key);
+        const std::string k(key);
+        const auto num = [&](const double x) { return writeText(buf, len, formatNum(x)); };
         if (k == "state")
             return writeText(buf, len, saveState());
-        const bool display = k.size() > 8 && k.compare(k.size() - 8, 8, "_display") == 0;
-        if (display)
-            k.resize(k.size() - 8);
-        const auto& map = controlsByKey();
-        const auto it = map.find(k);
-        if (it == map.end())
-            return 0;
-        const Control& c = *it->second;
-        if (c.kind == Kind::padsInfo)
-            return writeText(buf, len, padsText());
-        if (c.kind == Kind::master)
+        if (const int b = indexed(k, "btn_", kButtons); b >= 0)
+            return num(down[static_cast<std::size_t>(b)] ? 1.0 : 0.0);
+        if (const int l = indexed(k, "led_", kButtons); l >= 0)
+            return num(ledOn(l) ? 1.0 : 0.0);
+        if (const int c = indexed(k, "lcd_", kLcdCells); c >= 0)
+            return num(cellCode(c) / 127.0);
+        if (k == "shift")
+            return num(down[kShiftButton] ? 1.0 : 0.0);
+        if (k == "hold")
+            return num(holdNext ? 1.0 : 0.0);
+        if (numbered(k, "knob", 4) >= 0 || k == "enc")
+            return num(0.5);
+        if (k == "enc_push")
+            return num(0.0);
+        if (const int i = numbered(k, "fader", VOLT_ADC_FADERS); i >= 0)
+            return num(faders[static_cast<std::size_t>(i)]);
+        if (k.size() > 8 && k.compare(k.size() - 8, 8, "_display") == 0)
         {
-            if (display)
-            {
-                char b[32];
-                std::snprintf(b, sizeof b, "%+.1f dB", static_cast<double>(volumeDb));
-                return writeText(buf, len, b);
-            }
-            char b[32];
-            std::snprintf(b, sizeof b, "%.2f", static_cast<double>(volumeDb));
-            return writeText(buf, len, b);
+            const std::string base = k.substr(0, k.size() - 8);
+            if (const int i = numbered(base, "fader", VOLT_ADC_FADERS); i >= 0)
+                return writeText(buf, len, formatNum(faders[static_cast<std::size_t>(i)] * 100.0, 0) + "%");
+            if (base == "master")
+                return writeText(buf, len, (masterDb > 0.05 ? "+" : "") + formatNum(masterDb, 1) + " dB");
+            return 0;
         }
-        const int v = value(c);
-        return writeText(buf, len, display ? displayText(c, v) : std::to_string(v));
+        if (k == "master")
+            return num(masterDb);
+        if (k == "sync")
+            return num(sync ? 1.0 : 0.0);
+        if (k == "status")
+            return writeText(buf, len, status);
+        return 0;
+    }
+
+    // Called before each render: the MIDI clocks (24 per beat), start and stop
+    // that fall in the coming block, at their frames.
+    void songPos(const double ppq, const double bpm, const int playing, const int frames)
+    {
+        clocks.clear();
+        clockFrame = 0;
+        if (!machine || !sync)
+        {
+            wasPlaying = false;
+            return;
+        }
+        const bool isPlaying = playing != 0 && ppq >= 0.0 && bpm > 0.0;
+        if (isPlaying && (!wasPlaying || ppq + 1e-6 < lastPpq))   // started, or the MPC jumped back (a loop)
+            clocks.push_back({ 0, 0xFA });
+        if (!isPlaying && wasPlaying)
+            clocks.push_back({ 0, 0xFC });
+        if (isPlaying)
+        {
+            const double framesPerBeat = 60.0 / bpm * VOLT_SAMPLE_RATE;
+            const double end = ppq + frames / framesPerBeat;
+            for (double tick = std::ceil(ppq * 24.0 - 1e-9); tick / 24.0 < end; tick += 1.0)
+                clocks.push_back({ static_cast<int>((tick / 24.0 - ppq) * framesPerBeat), 0xF8 });
+            lastPpq = ppq;
+        }
+        wasPlaying = isPlaying;
     }
 
     void render(std::int16_t* out, const int frames)
     {
         if (out == nullptr || frames <= 0)
             return;
-        const float gain = std::pow(10.0f, volumeDb / 20.0f);
-        int done = 0;
-        while (done < frames)
+        const float gain = static_cast<float>(std::pow(10.0, masterDb / 20.0));
+        float l[kSubBlock], r[kSubBlock];
+        for (int done = 0; done < frames;)
         {
-            const int n = std::min(kMaxFrames, frames - done);
-            if (engine)
-                engine->render(left.data(), right.data(), n);
+            const int n = std::min(kSubBlock, frames - done);
+            if (machine)
+            {
+                beforeBlock(n);
+                machine->render(l, r, n);
+            }
             else
-                std::fill(left.begin(), left.end(), 0.0f), std::fill(right.begin(), right.end(), 0.0f);
+            {
+                std::fill(l, l + n, 0.0f);
+                std::fill(r, r + n, 0.0f);
+            }
             for (int i = 0; i < n; ++i)
             {
-                out[(done + i) * 2] = toPcm(left[static_cast<std::size_t>(i)] * gain);
-                out[(done + i) * 2 + 1] = toPcm(right[static_cast<std::size_t>(i)] * gain);
+                out[(done + i) * 2] = toPcm(l[i] * gain);
+                out[(done + i) * 2 + 1] = toPcm(r[i] * gain);
             }
             done += n;
         }
@@ -320,408 +340,280 @@ public:
 
     bool takeChangedKey(char* key, const int len)
     {
+        if (machine)
+        {
+            // what the firmware changed on its display and LEDs since last asked
+            if (machine->lcd_version() != lcdSeen)
+            {
+                lcdSeen = machine->lcd_version();
+                for (int c = 0; c < kLcdCells; ++c)
+                    if (cellCode(c) != lcdShown[static_cast<std::size_t>(c)])
+                        changed.insert(indexedKey("lcd_", c));
+            }
+            if (machine->led_version() != ledSeen)
+            {
+                ledSeen = machine->led_version();
+                for (int l = 0; l < kButtons; ++l)
+                    if (ledOn(l) != ledShown[static_cast<std::size_t>(l)])
+                        changed.insert(indexedKey("led_", l));
+            }
+        }
         if (changed.empty())
             return false;
-        writeText(key, len, changed.front());
-        changed.pop_front();
+        const std::string k = *changed.begin();
+        changed.erase(changed.begin());
+        writeText(key, len, k);
+        if (const int c = indexed(k, "lcd_", kLcdCells); c >= 0)
+            lcdShown[static_cast<std::size_t>(c)] = cellCode(c);
+        if (const int l = indexed(k, "led_", kButtons); l >= 0)
+            ledShown[static_cast<std::size_t>(l)] = ledOn(l);
         return true;
     }
 
-    // For the tests.
-    const VoltEngineApi* engineApi() const { return engine; }
-    std::size_t pendingChanges() const { return changed.size(); }
-
 private:
-    static std::int16_t toPcm(const float v)
+    struct Knob
     {
-        return static_cast<std::int16_t>(std::lround(std::clamp(v, -1.0f, 1.0f) * 32767.0f));
+        double angle = 90.0;    // where the wipers are
+        double target = 90.0;   // where the user turned it to
+    };
+
+    struct Clock
+    {
+        int frame;
+        std::uint8_t byte;
+    };
+
+    // A fresh engine copy with `card` on its SD card, booted.
+    void start(const std::string& card)
+    {
+        machine = nullptr;
+        status.clear();
+        copy = std::make_unique<EngineCopy>();
+        const char* forced = std::getenv("VOLTKIT_ENGINE");
+        if (!copy->load(forced != nullptr && *forced != '\0' ? forced : defaultEnginePath()))
+        {
+            status = "NO ENGINE " + copy->error();
+            markAllChanged();
+            return;
+        }
+        const VoltMachineApi* m = copy->api();
+        if (card.empty())
+            status = "NO CARD (engine/card.vkc)";
+        else if (!card::unpack(card, *m))
+            status = "CARD UNREADABLE";
+        if (m->boot() != 0)
+        {
+            status = "FIRMWARE DID NOT START";
+            markAllChanged();
+            return;
+        }
+        machine = m;
+        for (std::size_t i = 0; i < knobs.size(); ++i)
+        {
+            knobs[i] = Knob {};
+            const auto w = wipers(knobs[i].angle);
+            machine->adc(static_cast<int>(2 * i), w[0]);
+            machine->adc(static_cast<int>(2 * i + 1), w[1]);
+        }
+        for (std::size_t i = 0; i < faders.size(); ++i)
+            machine->adc(VOLT_ADC_KNOBS + static_cast<int>(i), faderRaw(faders[i]));
+        down.fill(false);
+        latched.fill(false);
+        releaseIn.fill(0);
+        holdNext = false;
+        encoderRelease = 0;
+        wasPlaying = false;
+        markAllChanged();
     }
 
-    int slotFor(const int note) const
+    void markAllChanged()
     {
-        if (!learnedNotes.empty())
+        lcdSeen = ledSeen = ~0u;
+        lcdShown.fill(-1);
+        ledShown.fill(false);
+        for (int c = 0; c < kLcdCells; ++c)
+            changed.insert(indexedKey("lcd_", c));
+        for (int l = 0; l < kButtons; ++l)
         {
-            const auto it = std::find(learnedNotes.begin(), learnedNotes.end(), note);
-            return it == learnedNotes.end() ? -1 : static_cast<int>(it - learnedNotes.begin());
+            changed.insert(indexedKey("led_", l));
+            changed.insert(indexedKey("btn_", l));
         }
-        const auto it = kDefaultNotes.find(note);
-        return it == kDefaultNotes.end() ? -1 : it->second;
+        for (const char* k : { "shift", "hold", "sync", "master" })
+            changed.insert(k);
+        for (int i = 1; i <= VOLT_ADC_FADERS; ++i)
+            changed.insert("fader" + std::to_string(i));
+    }
+
+    // Once per firmware block: keys let go, knobs turned a step, the clocks due.
+    void beforeBlock(const int frames)
+    {
+        for (int b = 0; b < kButtons; ++b)
+        {
+            int& left = releaseIn[static_cast<std::size_t>(b)];
+            if (left > 0 && (left -= frames) <= 0)
+                setHeld(b, false);
+        }
+        if (encoderRelease > 0 && (encoderRelease -= frames) <= 0)
+            machine->encoder_button(0);
+        for (std::size_t i = 0; i < knobs.size(); ++i)
+        {
+            Knob& kn = knobs[i];
+            const double diff = kn.target - kn.angle;
+            if (std::abs(diff) < 1e-6)
+                continue;
+            kn.angle += std::clamp(diff, -kKnobStep, kKnobStep);
+            const auto w = wipers(kn.angle);
+            machine->adc(static_cast<int>(2 * i), w[0]);
+            machine->adc(static_cast<int>(2 * i + 1), w[1]);
+        }
+        const int end = clockFrame + frames;
+        for (const Clock& c : clocks)
+            if (c.frame >= clockFrame && c.frame < end)
+                machine->midi(&c.byte, 1);
+        clockFrame = end;
+    }
+
+    // A tap on a panel key: pressed now, let go after kTapFrames; with HOLD,
+    // held until tapped again.
+    void tapKey(const int b)
+    {
+        if (bouncing(indexedKey("btn_", b)))
+            return;
+        const auto i = static_cast<std::size_t>(b);
+        if (latched[i])
+        {
+            setHeld(b, false);
+            return;
+        }
+        setHeld(b, true);
+        if (holdNext)
+        {
+            latched[i] = true;
+            holdNext = false;
+            changed.insert("hold");
+            return;
+        }
+        releaseIn[i] = kTapFrames;
+    }
+
+    void setHeld(const int b, const bool isDown)
+    {
+        const auto i = static_cast<std::size_t>(b);
+        releaseIn[i] = 0;
+        if (!isDown)
+            latched[i] = false;
+        if (down[i] == isDown)
+            return;
+        down[i] = isDown;
+        if (machine)
+            machine->button(b, isDown ? 1 : 0);
+        changed.insert(b == kShiftButton ? std::string("shift") : indexedKey("btn_", b));
     }
 
     bool bouncing(const std::string& key)
     {
         const auto now = std::chrono::steady_clock::now();
-        auto& last = lastPress[key];
-        if (last.time_since_epoch().count() != 0 && now - last < std::chrono::milliseconds(debounceMs))
+        const auto it = lastPress.find(key);
+        if (it != lastPress.end() && now - it->second < std::chrono::milliseconds(debounceMs))
             return true;
-        last = now;
+        lastPress[key] = now;
         return false;
     }
 
-    int raw(const int par) const { return engine ? engine->get_param(par) : 0; }
-    void send(const int par, const int v) { if (engine) engine->set_param(par, v); }
-
-    static const Targets& targetsOf(const int voice) { return kTargets[std::clamp(voice, 1, 6) - 1]; }
-
-    int lfoVoice(const int lfo) const { return std::clamp(raw(kParVoiceLfo1 + lfo - 1), 1, 6); }
-
-    // ---- parameters ----
-
-    void apply(const Control& c, const int v, const char* text)
+    // The character at display cell c (row * 16 + column): printable ASCII,
+    // anything else (the splash's and screensaver's own characters) blank.
+    // Without a running engine, the display spells out why.
+    int cellCode(const int c) const
     {
-        switch (c.kind)
+        if (!machine)
         {
-        case Kind::page:
-            pages[c.key] = v;
-            return;
-        case Kind::knob:
-        case Kind::pm60:
-        case Kind::pm63:
-        case Kind::menu:
-            send(c.par, v);
-            if (c.par == kParFxType)
-                sendFxValues();
-            return;
-        case Kind::out:
-            send(c.par, v != 0 ? kAudioOutFx : 0);
-            return;
-        case Kind::veldest:
-        {
-            const auto& t = targetsOf(c.voice);
-            send(c.par, v <= 0 ? 0 : std::min(t.lo + v - 1, t.hi));
-            return;
+            const auto i = static_cast<std::size_t>(c);
+            const unsigned char ch = i < status.size() ? static_cast<unsigned char>(status[i]) : ' ';
+            return ch >= 32 && ch < 127 ? ch : ' ';
         }
-        case Kind::lfovoice:
-        {
-            // A new target voice keeps the LFO on the same kind of target,
-            // the way the LXR's menu does.
-            const int lfo = c.voice;
-            const int voice = std::clamp(v + 1, 1, 6);
-            const int target = raw(kParTargetLfo1 + lfo - 1);
-            send(c.par, voice);
-            if (engine)
-                send(kParTargetLfo1 + lfo - 1, engine->retarget(target, voice));
-            changed.push_back(std::string(c.key).substr(0, 3) + "ldest");
-            return;
-        }
-        case Kind::lfodest:
-            sendLfoTarget(c.voice, v);
-            return;
-        case Kind::fxp:
-        {
-            const int slot = c.par - kParFxP1;
-            fxValues[static_cast<std::size_t>(c.voice)][static_cast<std::size_t>(slot)] = std::clamp(v, 0, 127);
-            if (raw(kParFxType) == c.voice)
-                send(c.par, v);
-            return;
-        }
-        case Kind::master:
-            volumeDb = std::clamp(parseFloat(text, 0.0f), -24.0f, 6.0f);
-            return;
-        case Kind::learn:
-            setLearning(v != 0);
-            return;
-        case Kind::padsClear:
-            if (v != 0 && !bouncing(c.key))
-            {
-                learning = false;
-                learnedNotes.clear();
-                std::error_code ec;
-                if (!pluginData.empty())
-                    std::filesystem::remove(std::filesystem::path(pluginData) / kPadMapFile, ec);
-                changed.push_back("learn");
-            }
-            return;
-        case Kind::initKit:
-            if (v != 0 && !bouncing(c.key) && engine)
-            {
-                engine->init();
-                captureFxValues();
-                markAllChanged();
-            }
-            return;
-        case Kind::padsInfo:
-            return;
-        }
+        const std::uint8_t ch = machine->lcd()[(c / 16) * 0x40 + c % 16];
+        return ch >= 32 && ch < 127 ? ch : ' ';
     }
 
-    int value(const Control& c) const
+    bool ledOn(const int l) const
     {
-        switch (c.kind)
-        {
-        case Kind::page:
-        {
-            const auto it = pages.find(c.key);
-            return it == pages.end() ? 0 : it->second;
-        }
-        case Kind::knob:
-        case Kind::pm60:
-        case Kind::pm63:
-        case Kind::menu:
-            return raw(c.par);
-        case Kind::out:
-            return raw(c.par) == kAudioOutFx ? 1 : 0;
-        case Kind::veldest:
-        {
-            const auto& t = targetsOf(c.voice);
-            const int abs = raw(c.par);
-            return abs >= t.lo && abs <= t.hi ? abs - t.lo + 1 : 0;
-        }
-        case Kind::lfovoice:
-            return lfoVoice(c.voice) - 1;
-        case Kind::lfodest:
-            return lfoRelative(c.voice);
-        case Kind::fxp:
-            return fxValues[static_cast<std::size_t>(c.voice)][static_cast<std::size_t>(c.par - kParFxP1)];
-        case Kind::learn:
-            return learning ? 1 : 0;
-        default:
-            return 0;
-        }
+        if (!machine)
+            return false;
+        const std::uint8_t* leds = machine->leds();
+        return l == 40 ? leds[5] != 0 : ((leds[l >> 3] >> (l & 7)) & 1) != 0;
     }
 
-    std::string displayText(const Control& c, const int v) const
-    {
-        switch (c.kind)
-        {
-        case Kind::pm60: return signedText(v - 60);
-        case Kind::pm63: return signedText(v - 63);
-        case Kind::lfodest:
-        {
-            if (v <= 0)
-                return "Off";
-            const auto& t = targetsOf(lfoVoice(c.voice));
-            const auto i = static_cast<std::size_t>(v - 1);
-            static const char* const voiceName[6] = { "D1", "D2", "D3", "SN", "CY", "HH" };
-            return i < t.names.size() ? std::string(voiceName[lfoVoice(c.voice) - 1]) + " " + t.names[i] : "Off";
-        }
-        default:
-            if (c.par == kParFxDryWet)   // the firmware's 0..100
-                return std::to_string(v) + "%";
-            return std::to_string(v);
-        }
-    }
+    // ---- state: the card, and what the plug-in itself keeps
 
-    // The LFO's target as a position in its target voice's list (0 = off).
-    int lfoRelative(const int lfo) const
-    {
-        const int abs = raw(kParTargetLfo1 + lfo - 1);
-        const auto& t = targetsOf(lfoVoice(lfo));
-        return abs >= t.lo && abs <= t.hi ? abs - t.lo + 1 : 0;
-    }
-
-    void sendLfoTarget(const int lfo, const int rel)
-    {
-        const auto& t = targetsOf(lfoVoice(lfo));
-        const int count = t.hi - t.lo + 1;
-        send(kParTargetLfo1 + lfo - 1, rel <= 0 ? 0 : t.lo + std::min(rel, count) - 1);
-    }
-
-    // Each effect remembers its own P1..P4; the firmware holds the active one's.
-    void captureFxValues()
-    {
-        for (auto& set : fxValues)
-            for (int j = 0; j < 4; ++j)
-                set[static_cast<std::size_t>(j)] = raw(kParFxP1 + j);
-    }
-
-    void sendFxValues()
-    {
-        const int type = std::clamp(raw(kParFxType), 0, kFxTypes - 1);
-        for (int j = 0; j < 4; ++j)
-            send(kParFxP1 + j, fxValues[static_cast<std::size_t>(type)][static_cast<std::size_t>(j)]);
-    }
-
-    void markAllChanged()
-    {
-        for (const auto& c : kControls)
-            if (c.par >= 0 || c.kind == Kind::lfodest)
-                changed.push_back(c.key);
-    }
-
-    // ---- PAD LEARN ----
-
-    void setLearning(const bool on)
-    {
-        if (on == learning)
-            return;
-        learning = on;
-        changed.push_back("learn");
-        if (on)
-        {
-            learnedNotes.clear();   // start over: the next pad is DRUM 1
-            return;
-        }
-        writePadMap(learnedNotes);
-    }
-
-    void writePadMap(const std::vector<int>& notes) const
-    {
-        if (notes.empty() || pluginData.empty())
-            return;
-        std::ofstream out(std::filesystem::path(pluginData) / kPadMapFile, std::ios::trunc);
-        for (const int n : notes)
-            out << n << "\n";
-    }
-
-    void saveLoop()
-    {
-        std::unique_lock lock(saverMutex);
-        while (!quit)
-        {
-            saverCv.wait_for(lock, std::chrono::milliseconds(250));
-            if (savePending.exchange(false, std::memory_order_acq_rel))
-                writePadMap(std::vector<int>(toSave.begin(), toSave.end()));
-        }
-    }
-
-    std::string padsText() const
-    {
-        if (!engine)
-            return "ENGINE NOT LOADED: " + engineCopy.error();
-        if (learning)
-        {
-            const auto n = learnedNotes.size();
-            return n < static_cast<std::size_t>(kPads)
-                ? "LEARN: HIT THE PAD FOR " + std::string(kPadName[n]) + "  (" + std::to_string(n + 1) + " OF 7)"
-                : "LEARNED ALL SEVEN";
-        }
-        if (!learnedNotes.empty())
-        {
-            std::string s = "PADS: LEARNED ";
-            for (std::size_t i = 0; i < learnedNotes.size(); ++i)
-                s += std::string("  ") + kPadShort[i] + " " + noteName(learnedNotes[i]);
-            return s;
-        }
-        return "PADS: GM DRUM NOTES (D1 36, D2 45, D3 48, SN 38, CY 49, CH 42, OH 46)";
-    }
-
-    // ---- state ----
-
-    // v=1;kit=<hex of the firmware's sound parameters>;fx=<hex>;pages=..;padmap=..;volume=..
     std::string saveState() const
     {
-        static const char* const hex = "0123456789abcdef";
-        std::string kit;
-        for (int p = 1; p < VOLT_PARAMS; ++p)
-        {
-            const int v = raw(p) & 0xff;
-            kit += hex[v >> 4];
-            kit += hex[v & 15];
-        }
-        std::string fx;
-        for (const auto& set : fxValues)
-            for (const int v : set)
-            {
-                fx += hex[(v & 0xff) >> 4];
-                fx += hex[v & 15];
-            }
-        std::string s = "v=1;kit=" + kit + ";fx=" + fx;
-        std::string pg;
-        for (const auto& [k, v] : pages)
-            pg += (pg.empty() ? "" : ".") + k + ":" + std::to_string(v);
-        s += ";pages=" + pg;
-        std::string map;
-        for (const int n : learnedNotes)
-            map += (map.empty() ? "" : ".") + std::to_string(n);
-        s += ";padmap=" + map;
-        char b[32];
-        std::snprintf(b, sizeof b, ";volume=%.2f", static_cast<double>(volumeDb));
-        return s + b;
+        std::string s = "v=2;sync=" + std::to_string(sync ? 1 : 0) + ";master=" + formatNum(masterDb, 2) + ";faders=";
+        for (std::size_t i = 0; i < faders.size(); ++i)
+            s += (i ? "," : "") + formatNum(faders[i], 4);
+        if (machine)
+            s += ";card=" + card::base64(card::pack(*machine));
+        return s;
     }
 
-    static std::vector<int> fromHex(const std::string& h)
+    void restore(const std::string& state)
     {
-        std::vector<int> out;
-        for (std::size_t i = 0; i + 1 < h.size(); i += 2)
-            out.push_back(static_cast<int>(std::strtol(h.substr(i, 2).c_str(), nullptr, 16)));
-        return out;
-    }
-
-    void restoreState(const std::string& state)
-    {
-        std::size_t pos = 0;
-        while (pos <= state.size())
+        std::string cardText;
+        std::stringstream items(state);
+        std::string item;
+        while (std::getline(items, item, ';'))
         {
-            const auto end = std::min(state.find(';', pos), state.size());
-            const auto item = state.substr(pos, end - pos);
-            pos = end + 1;
             const auto eq = item.find('=');
             if (eq == std::string::npos)
                 continue;
-            const auto k = item.substr(0, eq);
-            const auto v = item.substr(eq + 1);
-            if (k == "kit" && engine)
+            const std::string k = item.substr(0, eq), v = item.substr(eq + 1);
+            if (k == "sync")
+                sync = parseDouble(v.c_str(), 1.0) != 0.0;
+            else if (k == "master")
+                masterDb = std::clamp(parseDouble(v.c_str(), 0.0), -24.0, 6.0);
+            else if (k == "faders")
             {
-                // As a kit file: 8 name bytes, then parameters from 0.
-                std::vector<std::uint8_t> bytes(8 + VOLT_PARAMS, 0);
-                const auto vals = fromHex(v);
-                for (std::size_t i = 0; i < vals.size() && i + 1 < static_cast<std::size_t>(VOLT_PARAMS); ++i)
-                    bytes[8 + 1 + i] = static_cast<std::uint8_t>(vals[i]);
-                engine->load_kit(bytes.data(), static_cast<int>(bytes.size()));
+                std::stringstream ss(v);
+                std::string f;
+                for (std::size_t i = 0; i < faders.size() && std::getline(ss, f, ','); ++i)
+                    faders[i] = std::clamp(parseDouble(f.c_str(), 1.0), 0.0, 1.0);
             }
-            else if (k == "fx")
-            {
-                const auto vals = fromHex(v);
-                for (std::size_t i = 0; i < vals.size() && i < kFxTypes * 4; ++i)
-                    fxValues[i / 4][i % 4] = vals[i];
-                sendFxValues();
-            }
-            else if (k == "pages")
-            {
-                std::size_t at = 0;
-                while (at < v.size())
-                {
-                    const auto dot = std::min(v.find('.', at), v.size());
-                    const auto entry = v.substr(at, dot - at);
-                    const auto colon = entry.find(':');
-                    if (colon != std::string::npos)
-                        pages[entry.substr(0, colon)] = parseInt(entry.substr(colon + 1).c_str(), 0);
-                    at = dot + 1;
-                }
-            }
-            else if (k == "padmap")
-            {
-                std::vector<int> notes;
-                for (std::size_t at = 0; at < v.size() && notes.size() < static_cast<std::size_t>(kPads);)
-                {
-                    const auto dot = std::min(v.find('.', at), v.size());
-                    notes.push_back(parseInt(v.substr(at, dot - at).c_str(), -1));
-                    at = dot + 1;
-                }
-                learning = false;
-                learnedNotes.assign(notes.begin(), notes.end());
-            }
-            else if (k == "volume")
-            {
-                volumeDb = std::clamp(parseFloat(v.c_str(), 0.0f), -24.0f, 6.0f);
-            }
+            else if (k == "card")
+                cardText = v;
         }
-        markAllChanged();
+        std::string card;
+        start(!cardText.empty() && card::unbase64(cardText, card) ? card : defaultCard);
     }
 
-    voltkit::EngineCopy engineCopy;
-    const VoltEngineApi* engine = nullptr;
-    std::array<float, kMaxFrames> left {};
-    std::array<float, kMaxFrames> right {};
-    std::array<std::array<int, 4>, kFxTypes> fxValues {};
-    std::map<std::string, int> pages;
-    float volumeDb = 0.0f;
-    std::deque<std::string> changed;   // keys to report to MPC (mpc_engine_changed)
+    std::unique_ptr<EngineCopy> copy;
+    const VoltMachineApi* machine = nullptr;
+    std::string defaultCard;
+    std::string status;
 
-    std::string pluginData;            // the plug-in's data/ folder (pad map)
-    bool learning = false;
-    std::vector<int> learnedNotes;     // learnedNotes[slot] plays that pad slot
-    std::array<int, kPads> toSave {};
-    std::atomic<bool> savePending { false };
-    std::mutex saverMutex;
-    std::condition_variable saverCv;
-    bool quit = false;
+    std::array<bool, kButtons> down {};
+    std::array<bool, kButtons> latched {};
+    std::array<int, kButtons> releaseIn {};
+    bool holdNext = false;
+    std::array<Knob, 4> knobs {};
+    double encoderRest = 0.0;
+    int encoderRelease = 0;
+    std::array<double, VOLT_ADC_FADERS> faders { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    double masterDb = 0.0;
+
+    bool sync = true;
+    bool wasPlaying = false;
+    double lastPpq = 0.0;
+    std::vector<Clock> clocks;   // this host block's MIDI clock bytes, by frame
+    int clockFrame = 0;          // frames of this host block rendered so far
+
+    std::uint32_t lcdSeen = ~0u, ledSeen = ~0u;
+    std::array<int, kLcdCells> lcdShown {};
+    std::array<bool, kButtons> ledShown {};
+    std::set<std::string> changed;   // keys to report to MPC (mpc_engine_changed)
+
     std::optional<std::chrono::steady_clock::time_point> lastSuspend;
     std::map<std::string, std::chrono::steady_clock::time_point> lastPress;
     // VOLTKIT_DEBOUNCE_MS: the offline test turns it off to press keys quickly.
     const int debounceMs = std::getenv("VOLTKIT_DEBOUNCE_MS") ? std::atoi(std::getenv("VOLTKIT_DEBOUNCE_MS")) : kDebounceMs;
-    std::thread saver;   // last: started after everything it uses
 };
 
 void* engineCreate(const char* dataDir)
@@ -744,9 +636,9 @@ int engineGetParam(void* inst, const char* key, char* buf, const int len)
     return static_cast<Instance*>(inst)->getParam(key, buf, len);
 }
 void engineRender(void* inst, std::int16_t* out, const int frames) { static_cast<Instance*>(inst)->render(out, frames); }
-void engineSongPos(void* inst, double, const double bpm, const int playing, int)
+void engineSongPos(void* inst, const double ppq, const double bpm, const int playing, const int frames)
 {
-    static_cast<Instance*>(inst)->songPos(bpm, playing);
+    static_cast<Instance*>(inst)->songPos(ppq, bpm, playing, frames);
 }
 
 const mpc_engine_t kEngine { engineCreate, engineDestroy, engineMidi, engineSetParam, engineGetParam, engineRender, nullptr,

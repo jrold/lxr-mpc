@@ -126,6 +126,10 @@ set_target_properties(voltkit_adapter PROPERTIES C_VISIBILITY_PRESET hidden CXX_
 find_package(Threads REQUIRED)
 target_link_libraries(voltkit_adapter PUBLIC Threads::Threads ${CMAKE_DL_LIBS})
 
+# the adapter as the wrapper drives it (VOLTKIT_ENGINE, VOLTKIT_CARD)
+add_executable(voltkit-adapter-test ../test/AdapterTest.cpp)
+target_link_libraries(voltkit-adapter-test PRIVATE voltkit_adapter)
+
 if(MPC_PARAMS_DIR)
     if(NOT MPC_WRAPPER_SOURCE)
         set(MPC_WRAPPER_SOURCE ${MPC_VST_DIR}/wrapper/vst2_wrap.c)

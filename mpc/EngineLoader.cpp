@@ -97,9 +97,10 @@ bool EngineCopy::load(const std::string& libraryPath)
         return false;
     }
 
-    const auto entry = reinterpret_cast<VoltEngineApiFn>(dlsym(handle, "volt_engine_api"));
+    using Entry = const VoltMachineApi* (*)();
+    const auto entry = reinterpret_cast<Entry>(dlsym(handle, "volt_machine_api"));
     engine = entry ? entry() : nullptr;
-    if (!engine || engine->version != VOLT_ENGINE_API_VERSION)
+    if (!engine || engine->version != VOLT_MACHINE_API_VERSION)
     {
         message = "engine library doesn't match this plug-in";
         engine = nullptr;

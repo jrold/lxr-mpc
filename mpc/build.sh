@@ -37,7 +37,8 @@ mkdir -p "$BUILD"
 
 # 1b. the wrapper, patched to pass effMainsChanged on as set_param("mains"):
 #     MPC suspends and resumes plug-ins on every STOP press, and VOLTKIT
-#     stops all sound on two of them (MPC's own double-STOP).
+#     stops the LXR on two of them (MPC's own double-STOP). And its state
+#     buffer grows from 8 KB to 4 MB: the state holds the track's whole card.
 mkdir -p "$BUILD/wrapper"
 python3 - "$MPC_VST/wrapper/vst2_wrap.c" "$BUILD/wrapper/vst2_wrap.c" <<'PY'
 import sys
@@ -47,7 +48,12 @@ new = ("case effSetSampleRate: case effSetBlockSize: return 1;\n"
        "    case effMainsChanged: eng_set(w, \"mains\", v ? \"1\" : \"0\"); return 1;   /* VOLTKIT: MPC's STOP */")
 if src.count(old) != 1:
     sys.exit("build.sh: vst2_wrap.c changed; update the effMainsChanged patch")
-open(sys.argv[2], "w").write(src.replace(old, new))
+src = src.replace(old, new)
+old = "    char chunk[8192];"
+if src.count(old) != 1:
+    sys.exit("build.sh: vst2_wrap.c changed; update the chunk size patch")
+src = src.replace(old, "    char chunk[4 << 20];   /* VOLTKIT: the card */")
+open(sys.argv[2], "w").write(src)
 PY
 
 # 2. zig as an aarch64-linux-gnu cross toolchain (the wrappers drop the glibc
@@ -107,7 +113,7 @@ echo "plug-in exports: $EXPORTED"
 [ "$EXPORTED" = "VSTPluginMain " ] || { echo "error: the plug-in must export only VSTPluginMain" >&2; exit 1; }
 EXPORTED="$(nm -D --defined-only --extern-only "$ENGINE" | awk '{print $NF}' | tr '\n' ' ')"
 echo "engine exports: $EXPORTED"
-[ "$EXPORTED" = "volt_engine_api " ] || { echo "error: the engine must export only volt_engine_api" >&2; exit 1; }
+[ "$EXPORTED" = "volt_machine_api " ] || { echo "error: the engine must export only volt_machine_api" >&2; exit 1; }
 for f in "$SO" "$ENGINE"; do
     echo "$(basename "$f"): highest glibc $(strings "$f" | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1) (Live III has 2.39)"
 done
@@ -119,17 +125,20 @@ SKIN="$BUILD/skin/voltkit - VST - VOLTKIT"
 rm -rf "$BUILD/extra"
 mkdir -p "$BUILD/extra/data" "$BUILD/extra/engine"
 cat > "$BUILD/extra/data/README.txt" <<'EOF2'
-VOLTKIT keeps the pads you taught it with PAD LEARN here (padmap.txt), so new
-tracks start with them. Reinstalling VOLTKIT keeps this folder.
+Reinstalling VOLTKIT keeps this folder. Each track's LXR card (its kits,
+patterns and settings) is saved inside the MPC project, not here.
 EOF2
 cp "$ENGINE" "$BUILD/extra/engine/"
+cp "$HERE/../data/card.vkc" "$BUILD/extra/engine/"   # the card new tracks start with
 cp "$HERE/../LICENSE" "$BUILD/extra/engine/LICENSE.txt"
 cp "$HERE/../firmware/NOTICE.md" "$BUILD/extra/engine/LXR-NOTICE.md"
 cat > "$BUILD/extra/engine/SOURCE.txt" <<EOF2
 VOLTKIT $VERSION is free software under the GNU General Public License,
-version 3 (LICENSE.txt). It is built from the LXR V2 firmware's sound engine
-by Erica Synths (GPL-3.0, see LXR-NOTICE.md), modified to run as an MPC
-plug-in; VOLTKIT is not made, supported or endorsed by Erica Synths.
+version 3 (LICENSE.txt). It runs the LXR V2 firmware by Erica Synths
+(GPL-3.0, see LXR-NOTICE.md) on a virtual board after Greg Sadetsky's
+lxr02-recomp (GPL-3.0, https://github.com/gregsadetsky/lxr02-recomp), whose
+demo card is the default card (card.vkc). VOLTKIT is not made, supported or
+endorsed by Erica Synths or by Greg Sadetsky.
 
 Source: https://github.com/jrold/lxr-mpc (commit $(git -C "$HERE/.." rev-parse --short HEAD))
 EOF2
@@ -137,6 +146,6 @@ rm -rf "$BUILD/dist"
 python3 "$MPC_VST/tools/release.py" --so "$SO" --skin "$SKIN" --entry "$BUILD/pluginlist-entry.xml" \
     --version "$VERSION" --extra "$BUILD/extra/data:data" --extra "$BUILD/extra/engine:engine" --user-data data \
     --license GPL-3.0-only --repo jrold/lxr-mpc \
-    --about "A drum machine built from the LXR firmware's open-source sound engine: seven voices played from the pads." \
+    --about "The LXR-02 drum machine's open-source firmware on a virtual board: its sequencer, parameter locks, menus and seven voices, on the touchscreen." \
     -o "$BUILD/dist"
 ls -la "$BUILD/dist"
