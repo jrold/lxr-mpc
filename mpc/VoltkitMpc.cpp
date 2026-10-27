@@ -2,18 +2,22 @@
 // (engine/volt_machine.h) behind the MPC's touchscreen.
 //
 // The panel's controls are parameters (mpc/gen_layout.py):
-//   btn_00..btn_40   the panel keys (the firmware's button numbers; 40 = PAGE DOWN):
-//                    a tap presses one and lets go after kTapFrames. Momentary:
-//                    they read 0 (their LEDs show the state), so every tap is a 1
+//   btn_00..btn_40   the panel keys (the firmware's button numbers; 40 = PAGE DOWN).
+//                    A tap is down for one of the firmware's key scans and up on
+//                    the next. Momentary: they read 0 (their LEDs show the state)
 //   shift, hold      SHIFT latched; HOLD keeps the next key tapped held down
 //                    until it is tapped again (for the LXR's key combinations)
-//   knob1..knob4     the four endless knobs; enc the encoder, enc_push its push.
-//                    Each move counts from the value last set, and once a knob
-//                    has rested kRecentreMs it reads 0.5 again: endless, under
-//                    a finger's drag or a Q-Link's clicks
+//   knob1..knob4     the four knobs: each reads the value of the parameter the
+//                    display shows above it, and setting it turns the knob until
+//                    the firmware's value is there
+//   enc, enc_push    the encoder: endless, counted from the value last set; its push
 //   fader1..fader6   the six faders; master the output level
 //   sync             MIDI clock, start and stop from the MPC's transport (the
 //                    card's tempo is MID for it; off, set a tempo on the LXR)
+//   pad_mode         VOICES: the pads play the voices (learned, or General MIDI
+//                    drum notes); STEPS: the pads are the 16 step keys, held
+//                    while held (hold one and turn a knob: a parameter lock)
+//   learn, pads_clear, pads_info   PAD LEARN for the mode's pads
 //   led_00..led_40   the keys' LEDs, lcd_00..lcd_31 the 2x16 display's
 //                    characters: shown, never set (the engine reports them)
 //
@@ -32,9 +36,11 @@ extern "C" {
 
 #include <algorithm>
 #include <array>
+#include <atomic>
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -43,29 +49,52 @@ extern "C" {
 #include <iterator>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <optional>
 #include <set>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace
 {
 using namespace voltkit;
+using Clock = std::chrono::steady_clock;
 
-constexpr int kSubBlock = 64;                   // the firmware's own block
-constexpr int kTapFrames = 2646;                // a tapped key is held 60 ms (the firmware scans every few ms)
+constexpr int kSubBlock = 64;                   // MIDI clock bytes land within this many frames
 constexpr int kDebounceMs = 150;                // a skin key fires its press twice
 constexpr auto kDoubleStopWindow = std::chrono::milliseconds(1200);
+constexpr auto kKnobSettle = std::chrono::milliseconds(300);   // a knob still turning reads its target
 constexpr int kButtons = VOLT_BUTTONS;          // 41
 constexpr int kShiftButton = 32;                // BUT_SHIFT
 constexpr int kLcdCells = 32;
-constexpr double kKnobDegreesPerUnit = 512.0;   // a Q-Link click (1/128) turns a knob 4 degrees
-constexpr double kKnobStep = 3.0;               // at most this many degrees per firmware block: each step registers
+constexpr int kVoices = 7;
+constexpr int kSteps = 16;
+constexpr int kVoiceNote = 36;                  // the card's voice notes: 36..42 (tools/make_card.py)
 constexpr double kEncoderDetentsPerUnit = 128.0;
 constexpr int kRecentreMs = 250;
-constexpr int kDials = 5;                       // knob1..knob4, enc
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
+constexpr const char* kPadMapFile = "padmap.txt";   // the learned pads, for new tracks
+
+// SEQ1..SEQ16: the firmware's button numbers of the step keys.
+constexpr std::array<int, kSteps> kStepButtons { 39, 38, 37, 36, 31, 30, 29, 28, 23, 22, 21, 20, 15, 14, 13, 12 };
+constexpr std::array<const char*, kVoices> kVoiceName { "DRUM 1", "DRUM 2", "DRUM 3", "SNARE", "CYMBAL", "CLOSED HAT",
+                                                        "OPEN HAT" };
+constexpr std::array<const char*, kVoices> kVoiceShort { "D1", "D2", "D3", "SN", "CY", "CH", "OH" };
+
+// Pads play these unless PAD LEARN has mapped others: General MIDI drum
+// notes, a few per voice, so most pad layouts reach every voice.
+const std::map<int, int> kDefaultVoiceNotes {
+    { 35, 0 }, { 36, 0 },
+    { 41, 1 }, { 43, 1 }, { 45, 1 },
+    { 47, 2 }, { 48, 2 }, { 50, 2 },
+    { 37, 3 }, { 38, 3 }, { 39, 3 }, { 40, 3 },
+    { 49, 4 }, { 51, 4 }, { 52, 4 }, { 55, 4 }, { 57, 4 },
+    { 42, 5 }, { 44, 5 },
+    { 46, 6 },
+};
+constexpr int kDefaultStepNote = 36;            // STEPS without a learned map: pads from C1 up
 
 double parseDouble(const char* text, const double fallback)
 {
@@ -91,6 +120,12 @@ std::string formatNum(const double v, const int decimals = 4)
     char b[48];
     std::snprintf(b, sizeof b, "%.*f", decimals, v);
     return b;
+}
+
+std::string noteName(const int n)
+{
+    static const char* names[] { "C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B" };
+    return std::string(names[n % 12]) + std::to_string(n / 12 - 2);   // MPC's octaves: 36 = C1
 }
 
 // "btn_07" -> 7 for a key with that prefix and a two-digit index below `count`; else -1.
@@ -121,31 +156,37 @@ int numbered(const std::string& key, const char* prefix, const int count)
     return i >= 0 && i < count ? i : -1;
 }
 
-// An endless knob's two wipers at `deg`: triangle tracks 90 degrees apart, as
-// the firmware's adcPots.c reads them (raw 16-bit ADC readings).
-std::array<int, 2> wipers(const double deg)
-{
-    const double t = std::fmod(std::fmod(deg, 360.0) + 360.0, 360.0);
-    const double b = t <= 180.0 ? t : 360.0 - t;
-    const double a = t <= 90.0 ? 90.0 + t : t <= 270.0 ? 270.0 - t : t - 270.0;
-    const auto raw = [](const double d) { return static_cast<int>(std::lround(d / 180.0 * 0xFFF)) << 4; };
-    return { raw(a), raw(b) };
-}
-
-int faderRaw(const double v)
-{
-    return static_cast<int>(std::lround(v * 0xFFF)) << 4;
-}
-
 std::int16_t toPcm(const float v)
 {
     return static_cast<std::int16_t>(std::lround(std::clamp(v, -1.0f, 1.0f) * 32767.0f));
 }
 
+std::vector<int> parseNotes(const std::string& text, const std::size_t most)
+{
+    std::vector<int> notes;
+    std::stringstream ss(text);
+    std::string item;
+    while (notes.size() < most && std::getline(ss, item, ','))
+    {
+        const double n = parseDouble(item.c_str(), -1.0);
+        if (n >= 0.0 && n <= 127.0)
+            notes.push_back(static_cast<int>(n));
+    }
+    return notes;
+}
+
+std::string joinNotes(const std::vector<int>& notes)
+{
+    std::string s;
+    for (std::size_t i = 0; i < notes.size(); ++i)
+        s += (i ? "," : "") + std::to_string(notes[i]);
+    return s;
+}
+
 class Instance
 {
 public:
-    explicit Instance(const char*)
+    explicit Instance(const char* dataDir)
     {
         // the default card ships beside the engine (VOLTKIT_CARD: another one)
         const char* forced = std::getenv("VOLTKIT_CARD");
@@ -154,16 +195,63 @@ public:
                               : std::filesystem::path(defaultEnginePath()).parent_path() / kCardFile;
         std::ifstream in(path, std::ios::binary);
         defaultCard.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+        if (dataDir != nullptr && *dataDir != '\0')
+        {
+            pluginData = dataDir;
+            readPadMap();
+        }
         start(defaultCard);
+        saver = std::thread([this] { saveLoop(); });
+    }
+
+    ~Instance()
+    {
+        {
+            std::scoped_lock lock(saverMutex);
+            quit = true;
+        }
+        saverCv.notify_all();
+        saver.join();
     }
 
     Instance(const Instance&) = delete;
     Instance& operator=(const Instance&) = delete;
 
+    // ---- wrapper calls ----
+
     void midi(const std::uint8_t* msg, const int len)
     {
-        if (msg != nullptr && len > 0 && machine)
-            machine->midi(msg, len);   // the pads and anything else: the LXR's DIN MIDI input
+        if (msg == nullptr || len < 1 || !machine)
+            return;
+        const int status = msg[0] & 0xF0;
+        if (msg[0] >= 0xF8)
+            return;   // realtime: the transport's clock is ours (sync)
+        if ((status == 0x90 || status == 0x80) && len >= 3)
+        {
+            const int note = msg[1] & 0x7F, vel = msg[2] & 0x7F;
+            const bool on = status == 0x90 && vel > 0;
+            if (on && learning)
+                learnNote(note);
+            if (padMode == 0)
+            {
+                const int v = voiceFor(note);
+                if (v >= 0)
+                {
+                    const std::uint8_t out[3] = { static_cast<std::uint8_t>(on ? 0x90 : 0x80),
+                                                  static_cast<std::uint8_t>(kVoiceNote + v),
+                                                  static_cast<std::uint8_t>(on ? vel : 0) };
+                    machine->midi(out, 3);
+                }
+            }
+            else
+            {
+                const int s = stepFor(note);
+                if (s >= 0)
+                    machine->key(kStepButtons[static_cast<std::size_t>(s)], on ? 1 : 0);
+            }
+            return;
+        }
+        machine->midi(msg, len);   // anything else (CCs, pitch bend...) as it comes
     }
 
     void setParam(const char* key, const char* val)
@@ -183,7 +271,7 @@ public:
             // patched wrapper passes it on): two close together stop the LXR.
             if (v == 0.0)
             {
-                const auto now = std::chrono::steady_clock::now();
+                const auto now = Clock::now();
                 if (lastSuspend && now - *lastSuspend < kDoubleStopWindow && machine)
                 {
                     const std::uint8_t stop = 0xFC;
@@ -197,7 +285,12 @@ public:
         {
             if (v != 0.0)
                 tapKey(b);
-            return;   // the release is ours (kTapFrames), not the wrapper's
+            return;
+        }
+        if (indexed(k, "lcd_", kLcdCells) >= 0 || indexed(k, "led_", kButtons) >= 0)
+        {
+            changed.insert(k);   // shown, never set: put back what the machine shows
+            return;
         }
         if (k == "shift")
         {
@@ -209,46 +302,44 @@ public:
             holdNext = v != 0.0;
             return;
         }
-        if (const int d = dialIndex(k); d >= 0)
+        if (const int i = numbered(k, "knob", VOLT_KNOBS); i >= 0)
         {
-            const double moved = turn(d, v);
-            if (d < 4)
-                knobs[static_cast<std::size_t>(d)].target += moved * kKnobDegreesPerUnit;
-            else
-            {
-                encoderRest += moved * kEncoderDetentsPerUnit;
-                const int detents = static_cast<int>(encoderRest);
-                encoderRest -= detents;
-                if (detents != 0 && machine)
-                    machine->encoder(detents);
-            }
+            turnKnob(i, v);
+            return;
+        }
+        if (k == "enc")
+        {
+            encoderRest += turnEncoder(v) * kEncoderDetentsPerUnit;
+            // whole detents, allowing for the host's rounding (0.507812 for 0.5 + 1/128)
+            const int detents = static_cast<int>(encoderRest + (encoderRest > 0 ? 0.01 : -0.01));
+            encoderRest -= detents;
+            if (detents != 0 && machine)
+                machine->encoder(detents);
             return;
         }
         if (k == "enc_push")
         {
             if (v != 0.0 && machine && !bouncing(k))
-            {
-                machine->encoder_button(1);
-                encoderRelease = kTapFrames;
-            }
+                machine->encoder_push();
             return;
         }
-        if (const int i = numbered(k, "fader", VOLT_ADC_FADERS); i >= 0)
+        if (const int i = numbered(k, "fader", VOLT_FADERS); i >= 0)
         {
             faders[static_cast<std::size_t>(i)] = std::clamp(v, 0.0, 1.0);
             if (machine)
-                machine->adc(VOLT_ADC_KNOBS + i, faderRaw(faders[static_cast<std::size_t>(i)]));
-            return;
-        }
-        if (indexed(k, "lcd_", kLcdCells) >= 0 || indexed(k, "led_", kButtons) >= 0)
-        {
-            changed.insert(k);   // shown, never set: put back what the machine shows
+                machine->fader(i, static_cast<int>(std::lround(faders[static_cast<std::size_t>(i)] * 4095.0)));
             return;
         }
         if (k == "master")
             masterDb = std::clamp(v, -24.0, 6.0);
         else if (k == "sync")
             sync = v != 0.0;
+        else if (k == "pad_mode")
+            setPadMode(v >= 0.5 ? 1 : 0);
+        else if (k == "learn")
+            setLearning(v != 0.0);
+        else if (k == "pads_clear" && v != 0.0)
+            clearPads();
     }
 
     int getParam(const char* key, char* buf, const int len)
@@ -269,16 +360,25 @@ public:
             return num(down[kShiftButton] ? 1.0 : 0.0);
         if (k == "hold")
             return num(holdNext ? 1.0 : 0.0);
-        if (const int d = dialIndex(k); d >= 0)
-            return num(dials[static_cast<std::size_t>(d)].last);
-        if (k == "enc_push")
+        if (const int i = numbered(k, "knob", VOLT_KNOBS); i >= 0)
+            return num(knobShown(i));
+        if (k.size() == 13 && k.compare(0, 4, "knob") == 0 && k.compare(5, 8, "_display") == 0)
+        {
+            const int i = numbered(k.substr(0, 5), "knob", VOLT_KNOBS);
+            return i >= 0 && knobs[static_cast<std::size_t>(i)].param != -1000
+                       ? writeText(buf, len, std::to_string(knobValueShown(i)))
+                       : writeText(buf, len, "-");
+        }
+        if (k == "enc")
+            return num(encoder.last);
+        if (k == "enc_push" || k == "pads_clear")
             return num(0.0);
-        if (const int i = numbered(k, "fader", VOLT_ADC_FADERS); i >= 0)
+        if (const int i = numbered(k, "fader", VOLT_FADERS); i >= 0)
             return num(faders[static_cast<std::size_t>(i)]);
         if (k.size() > 8 && k.compare(k.size() - 8, 8, "_display") == 0)
         {
             const std::string base = k.substr(0, k.size() - 8);
-            if (const int i = numbered(base, "fader", VOLT_ADC_FADERS); i >= 0)
+            if (const int i = numbered(base, "fader", VOLT_FADERS); i >= 0)
                 return writeText(buf, len, formatNum(faders[static_cast<std::size_t>(i)] * 100.0, 0) + "%");
             if (base == "master")
                 return writeText(buf, len, (masterDb > 0.05 ? "+" : "") + formatNum(masterDb, 1) + " dB");
@@ -288,6 +388,12 @@ public:
             return num(masterDb);
         if (k == "sync")
             return num(sync ? 1.0 : 0.0);
+        if (k == "pad_mode")
+            return num(padMode);
+        if (k == "learn")
+            return num(learning ? 1.0 : 0.0);
+        if (k == "pads_info")
+            return writeText(buf, len, padsText());
         if (k == "status")
             return writeText(buf, len, status);
         return 0;
@@ -331,7 +437,11 @@ public:
             const int n = std::min(kSubBlock, frames - done);
             if (machine)
             {
-                beforeBlock(n);
+                const int end = clockFrame + n;
+                for (const ClockByte& c : clocks)
+                    if (c.frame >= clockFrame && c.frame < end)
+                        machine->midi(&c.byte, 1);
+                clockFrame = end;
                 machine->render(l, r, n);
             }
             else
@@ -352,7 +462,7 @@ public:
     {
         if (machine)
         {
-            // what the firmware changed on its display and LEDs since last asked
+            // what the firmware changed on its display, LEDs and knobs since last asked
             if (machine->lcd_version() != lcdSeen)
             {
                 lcdSeen = machine->lcd_version();
@@ -367,16 +477,14 @@ public:
                     if (ledOn(l) != ledShown[static_cast<std::size_t>(l)])
                         changed.insert(indexedKey("led_", l));
             }
+            for (int i = 0; i < VOLT_KNOBS; ++i)
+                pollKnob(i);
         }
-        const auto now = std::chrono::steady_clock::now();
-        for (int d = 0; d < kDials; ++d)
+        if (!encoder.resting && Clock::now() - encoder.lastSet >= std::chrono::milliseconds(recentreMs))
         {
-            Dial& dial = dials[static_cast<std::size_t>(d)];
-            if (dial.resting || now - dial.lastSet < std::chrono::milliseconds(recentreMs))
-                continue;
-            dial.resting = true;
-            dial.last = 0.5;
-            changed.insert(dialKey(d));
+            encoder.resting = true;
+            encoder.last = 0.5;
+            changed.insert("enc");
         }
         if (changed.empty())
             return false;
@@ -391,48 +499,33 @@ public:
     }
 
 private:
-    struct Knob
-    {
-        double angle = 90.0;    // where the wipers are
-        double target = 90.0;   // where the user turned it to
-    };
-
-    struct Clock
+    struct ClockByte
     {
         int frame;
         std::uint8_t byte;
     };
 
+    // What a knob shows: the firmware's parameter under it, or, while it is
+    // still turning there, where it was sent.
+    struct Knob
+    {
+        int param = -1000;        // -1000: nothing under it
+        int value = 0, min = 0, max = 127;
+        int target = 0;
+        bool turning = false;
+        Clock::time_point sentAt {};
+    };
+
     struct Dial
     {
         double last = 0.5;   // the value the host last set (and reads back)
-        std::chrono::steady_clock::time_point lastSet {};
+        Clock::time_point lastSet {};
         bool resting = true;
     };
 
-    static int dialIndex(const std::string& key)
-    {
-        return key == "enc" ? 4 : numbered(key, "knob", 4);
-    }
-
-    static std::string dialKey(const int d)
-    {
-        return d == 4 ? std::string("enc") : "knob" + std::to_string(d + 1);
-    }
-
-    // How far a knob or the encoder moved since the value last set.
-    double turn(const int d, const double v)
-    {
-        Dial& dial = dials[static_cast<std::size_t>(d)];
-        const double moved = v - dial.last;
-        dial.last = v;
-        dial.lastSet = std::chrono::steady_clock::now();
-        dial.resting = false;
-        return moved;
-    }
-
-    // A fresh engine copy with `card` on its SD card, booted.
-    void start(const std::string& card)
+    // A fresh engine copy with `card` on its SD card, booted. A blank card is
+    // formatted by the firmware, which then asks for a reboot: it gets one.
+    void start(const std::string& card, const int tries = 2)
     {
         machine = nullptr;
         status.clear();
@@ -445,32 +538,28 @@ private:
             return;
         }
         const VoltMachineApi* m = copy->api();
-        if (card.empty())
-            status = "NO CARD (engine/card.vkc)";
-        else if (!card::unpack(card, *m))
+        if (!card.empty() && !card::unpack(card, *m))
             status = "CARD UNREADABLE";
         if (m->boot() != 0)
         {
+            if (tries > 1 && m->card_version() != 0)
+            {
+                const std::string prepared = card::pack(*m);   // what the firmware wrote: boot on it
+                start(prepared, tries - 1);
+                return;
+            }
             status = "FIRMWARE DID NOT START";
             markAllChanged();
             return;
         }
         machine = m;
-        for (std::size_t i = 0; i < knobs.size(); ++i)
-        {
-            knobs[i] = Knob {};
-            const auto w = wipers(knobs[i].angle);
-            machine->adc(static_cast<int>(2 * i), w[0]);
-            machine->adc(static_cast<int>(2 * i + 1), w[1]);
-        }
         for (std::size_t i = 0; i < faders.size(); ++i)
-            machine->adc(VOLT_ADC_KNOBS + static_cast<int>(i), faderRaw(faders[i]));
+            machine->fader(static_cast<int>(i), static_cast<int>(std::lround(faders[i] * 4095.0)));
         down.fill(false);
         latched.fill(false);
-        releaseIn.fill(0);
         holdNext = false;
-        encoderRelease = 0;
         wasPlaying = false;
+        knobs = {};
         markAllChanged();
     }
 
@@ -483,46 +572,19 @@ private:
             changed.insert(indexedKey("lcd_", c));
         for (int l = 0; l < kButtons; ++l)
             changed.insert(indexedKey("led_", l));
-        for (const char* k : { "shift", "hold", "sync", "master" })
+        for (const char* k : { "shift", "hold", "sync", "master", "pad_mode", "learn", "pads_info" })
             changed.insert(k);
-        for (int i = 1; i <= VOLT_ADC_FADERS; ++i)
+        for (int i = 1; i <= VOLT_FADERS; ++i)
             changed.insert("fader" + std::to_string(i));
     }
 
-    // Once per firmware block: keys let go, knobs turned a step, the clocks due.
-    void beforeBlock(const int frames)
-    {
-        for (int b = 0; b < kButtons; ++b)
-        {
-            int& left = releaseIn[static_cast<std::size_t>(b)];
-            if (left > 0 && (left -= frames) <= 0)
-                setHeld(b, false);
-        }
-        if (encoderRelease > 0 && (encoderRelease -= frames) <= 0)
-            machine->encoder_button(0);
-        for (std::size_t i = 0; i < knobs.size(); ++i)
-        {
-            Knob& kn = knobs[i];
-            const double diff = kn.target - kn.angle;
-            if (std::abs(diff) < 1e-6)
-                continue;
-            kn.angle += std::clamp(diff, -kKnobStep, kKnobStep);
-            const auto w = wipers(kn.angle);
-            machine->adc(static_cast<int>(2 * i), w[0]);
-            machine->adc(static_cast<int>(2 * i + 1), w[1]);
-        }
-        const int end = clockFrame + frames;
-        for (const Clock& c : clocks)
-            if (c.frame >= clockFrame && c.frame < end)
-                machine->midi(&c.byte, 1);
-        clockFrame = end;
-    }
+    // ---- keys
 
-    // A tap on a panel key: pressed now, let go after kTapFrames; with HOLD,
+    // A tap on a panel key: down for one scan, up on the next; with HOLD,
     // held until tapped again.
     void tapKey(const int b)
     {
-        if (bouncing(indexedKey("btn_", b)))
+        if (bouncing(indexedKey("btn_", b)) || !machine)
             return;
         const auto i = static_cast<std::size_t>(b);
         if (latched[i])
@@ -530,41 +592,108 @@ private:
             setHeld(b, false);
             return;
         }
-        setHeld(b, true);
         if (holdNext)
         {
+            setHeld(b, true);
             latched[i] = true;
             holdNext = false;
             changed.insert("hold");
             return;
         }
-        releaseIn[i] = kTapFrames;
+        machine->tap(b);
     }
 
     void setHeld(const int b, const bool isDown)
     {
         const auto i = static_cast<std::size_t>(b);
-        releaseIn[i] = 0;
         if (!isDown)
             latched[i] = false;
         if (down[i] == isDown)
             return;
         down[i] = isDown;
         if (machine)
-            machine->button(b, isDown ? 1 : 0);
+            machine->key(b, isDown ? 1 : 0);
         if (b == kShiftButton)
             changed.insert("shift");
     }
 
     bool bouncing(const std::string& key)
     {
-        const auto now = std::chrono::steady_clock::now();
+        const auto now = Clock::now();
         const auto it = lastPress.find(key);
         if (it != lastPress.end() && now - it->second < std::chrono::milliseconds(debounceMs))
             return true;
         lastPress[key] = now;
         return false;
     }
+
+    // ---- knobs: the firmware's values
+
+    void turnKnob(const int i, const double v)
+    {
+        VoltKnob info;
+        if (!machine || !machine->knob(i, &info))
+            return;
+        Knob& kn = knobs[static_cast<std::size_t>(i)];
+        const int target = static_cast<int>(std::lround(info.min + std::clamp(v, 0.0, 1.0) * (info.max - info.min)));
+        if (target == info.value && !kn.turning)
+            return;   // the host reading back what it was shown
+        machine->knob_to(i, target);
+        kn.target = target;
+        kn.turning = true;
+        kn.sentAt = Clock::now();
+    }
+
+    void pollKnob(const int i)
+    {
+        Knob& kn = knobs[static_cast<std::size_t>(i)];
+        VoltKnob info;
+        if (!machine->knob(i, &info))
+            info = VoltKnob { -1000, 0, 0, 127 };
+        bool report = false;
+        if (kn.turning && (info.value == kn.target || info.param != kn.param || Clock::now() - kn.sentAt > kKnobSettle))
+        {
+            kn.turning = false;
+            report = true;   // where it got to, which may be short of where it was sent
+        }
+        if (info.param != kn.param || info.value != kn.value || info.min != kn.min || info.max != kn.max)
+        {
+            kn.param = info.param;
+            kn.value = info.value;
+            kn.min = info.min;
+            kn.max = info.max;
+            report |= !kn.turning;
+        }
+        if (report)
+        {
+            changed.insert("knob" + std::to_string(i + 1));
+            changed.insert("knob" + std::to_string(i + 1) + "_display");
+        }
+    }
+
+    int knobValueShown(const int i) const
+    {
+        const Knob& kn = knobs[static_cast<std::size_t>(i)];
+        return kn.turning ? kn.target : kn.value;
+    }
+
+    double knobShown(const int i) const
+    {
+        const Knob& kn = knobs[static_cast<std::size_t>(i)];
+        return kn.max > kn.min ? static_cast<double>(knobValueShown(i) - kn.min) / (kn.max - kn.min) : 0.0;
+    }
+
+    // The encoder: how far it moved since the value last set.
+    double turnEncoder(const double v)
+    {
+        const double moved = v - encoder.last;
+        encoder.last = v;
+        encoder.lastSet = Clock::now();
+        encoder.resting = false;
+        return moved;
+    }
+
+    // ---- the display and LEDs
 
     // The character at display cell c (row * 16 + column): printable ASCII,
     // anything else (the splash's and screensaver's own characters) blank.
@@ -589,15 +718,167 @@ private:
         return l == 40 ? leds[5] != 0 : ((leds[l >> 3] >> (l & 7)) & 1) != 0;
     }
 
+    // ---- the pads
+
+    int voiceFor(const int note) const
+    {
+        if (!voiceNotes.empty())
+        {
+            const auto it = std::find(voiceNotes.begin(), voiceNotes.end(), note);
+            return it == voiceNotes.end() ? -1 : static_cast<int>(it - voiceNotes.begin());
+        }
+        const auto it = kDefaultVoiceNotes.find(note);
+        return it == kDefaultVoiceNotes.end() ? -1 : it->second;
+    }
+
+    int stepFor(const int note) const
+    {
+        if (!stepNotes.empty())
+        {
+            const auto it = std::find(stepNotes.begin(), stepNotes.end(), note);
+            return it == stepNotes.end() ? -1 : static_cast<int>(it - stepNotes.begin());
+        }
+        const int s = note - kDefaultStepNote;
+        return s >= 0 && s < kSteps ? s : -1;
+    }
+
+    std::vector<int>& learnTarget() { return padMode == 0 ? voiceNotes : stepNotes; }
+    std::size_t learnCount() const { return padMode == 0 ? kVoices : kSteps; }
+
+    // PAD LEARN: each new note becomes the next pad (D1 to OH, or step 1 to 16).
+    void learnNote(const int note)
+    {
+        std::vector<int>& notes = learnTarget();
+        if (std::find(notes.begin(), notes.end(), note) != notes.end())
+            return;
+        notes.push_back(note);
+        changed.insert("pads_info");
+        if (notes.size() == learnCount())
+        {
+            learning = false;
+            changed.insert("learn");
+            queuePadMapSave();
+        }
+    }
+
+    void setLearning(const bool on)
+    {
+        if (on == learning)
+            return;
+        learning = on;
+        changed.insert("learn");
+        changed.insert("pads_info");
+        if (on)
+            learnTarget().clear();   // start over: the next pad is the first
+        else
+            queuePadMapSave();
+    }
+
+    void clearPads()
+    {
+        learning = false;
+        learnTarget().clear();
+        changed.insert("learn");
+        changed.insert("pads_info");
+        queuePadMapSave();
+    }
+
+    void setPadMode(const int mode)
+    {
+        if (mode == padMode)
+            return;
+        if (padMode == 1 && machine)   // steps held by pads let go
+            for (const int b : kStepButtons)
+                machine->key(b, 0);
+        padMode = mode;
+        learning = false;
+        changed.insert("pad_mode");
+        changed.insert("learn");
+        changed.insert("pads_info");
+    }
+
+    std::string padsText() const
+    {
+        if (!status.empty())
+            return status;
+        const std::vector<int>& notes = padMode == 0 ? voiceNotes : stepNotes;
+        if (learning)
+        {
+            const std::size_t n = notes.size();
+            if (padMode == 0)
+                return "LEARN: HIT THE PAD FOR " + std::string(kVoiceName[std::min<std::size_t>(n, kVoices - 1)]) + "  ("
+                       + std::to_string(n + 1) + " OF 7)";
+            return "LEARN: HIT THE PAD FOR STEP " + std::to_string(n + 1) + "  (" + std::to_string(n + 1) + " OF 16)";
+        }
+        if (padMode == 1)
+            return notes.empty() ? "PADS ARE THE STEP KEYS: " + noteName(kDefaultStepNote) + " UP IS STEP 1 TO 16. HOLD ONE "
+                                       "AND TURN A KNOB TO LOCK"
+                                 : "PADS ARE THE STEP KEYS (LEARNED). HOLD ONE AND TURN A KNOB TO LOCK";
+        if (!notes.empty())
+        {
+            std::string s = "PADS: LEARNED ";
+            for (std::size_t i = 0; i < notes.size(); ++i)
+                s += std::string("  ") + kVoiceShort[i] + " " + noteName(notes[i]);
+            return s;
+        }
+        return "PADS: GM DRUM NOTES (D1 36, D2 45, D3 48, SN 38, CY 49, CH 42, OH 46)";
+    }
+
+    // The learned pads, for new tracks: data/padmap.txt, written off the audio thread.
+    void readPadMap()
+    {
+        std::ifstream in(std::filesystem::path(pluginData) / kPadMapFile);
+        std::string line;
+        while (std::getline(in, line))
+        {
+            if (line.rfind("voices ", 0) == 0)
+                voiceNotes = parseNotes(line.substr(7), kVoices);
+            else if (line.rfind("steps ", 0) == 0)
+                stepNotes = parseNotes(line.substr(6), kSteps);
+        }
+    }
+
+    void queuePadMapSave()
+    {
+        std::scoped_lock lock(saverMutex);
+        toSave = "voices " + joinNotes(voiceNotes) + "\nsteps " + joinNotes(stepNotes) + "\n";
+        savePending = true;
+        saverCv.notify_all();
+    }
+
+    void saveLoop()
+    {
+        std::unique_lock lock(saverMutex);
+        while (!quit)
+        {
+            saverCv.wait(lock, [this] { return quit || savePending; });
+            if (!savePending || pluginData.empty())
+            {
+                savePending = false;
+                continue;
+            }
+            const std::string text = toSave;
+            savePending = false;
+            lock.unlock();
+            std::ofstream out(std::filesystem::path(pluginData) / kPadMapFile, std::ios::trunc);
+            out << text;
+            lock.lock();
+        }
+    }
+
     // ---- state: the card, and what the plug-in itself keeps
 
     std::string saveState() const
     {
-        std::string s = "v=2;sync=" + std::to_string(sync ? 1 : 0) + ";master=" + formatNum(masterDb, 2) + ";faders=";
+        std::string s = "v=3;sync=" + std::to_string(sync ? 1 : 0) + ";master=" + formatNum(masterDb, 2) + ";faders=";
         for (std::size_t i = 0; i < faders.size(); ++i)
             s += (i ? "," : "") + formatNum(faders[i], 4);
+        s += ";pads=" + std::to_string(padMode) + ";voices=" + joinNotes(voiceNotes) + ";steps=" + joinNotes(stepNotes);
         if (machine)
+        {
+            machine->flush();   // what the firmware would autosave in a moment: on the card now
             s += ";card=" + card::base64(card::pack(*machine));
+        }
         return s;
     }
 
@@ -623,9 +904,16 @@ private:
                 for (std::size_t i = 0; i < faders.size() && std::getline(ss, f, ','); ++i)
                     faders[i] = std::clamp(parseDouble(f.c_str(), 1.0), 0.0, 1.0);
             }
+            else if (k == "pads")
+                padMode = parseDouble(v.c_str(), 0.0) >= 0.5 ? 1 : 0;
+            else if (k == "voices")
+                voiceNotes = parseNotes(v, kVoices);
+            else if (k == "steps")
+                stepNotes = parseNotes(v, kSteps);
             else if (k == "card")
                 cardText = v;
         }
+        learning = false;
         std::string card;
         start(!cardText.empty() && card::unbase64(cardText, card) ? card : defaultCard);
     }
@@ -637,31 +925,42 @@ private:
 
     std::array<bool, kButtons> down {};
     std::array<bool, kButtons> latched {};
-    std::array<int, kButtons> releaseIn {};
     bool holdNext = false;
-    std::array<Knob, 4> knobs {};
-    std::array<Dial, kDials> dials {};
+    std::array<Knob, VOLT_KNOBS> knobs {};
+    Dial encoder;
     double encoderRest = 0.0;
-    int encoderRelease = 0;
-    std::array<double, VOLT_ADC_FADERS> faders { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
+    std::array<double, VOLT_FADERS> faders { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
     double masterDb = 0.0;
 
     bool sync = true;
     bool wasPlaying = false;
     double lastPpq = 0.0;
-    std::vector<Clock> clocks;   // this host block's MIDI clock bytes, by frame
-    int clockFrame = 0;          // frames of this host block rendered so far
+    std::vector<ClockByte> clocks;   // this host block's MIDI clock bytes, by frame
+    int clockFrame = 0;              // frames of this host block rendered so far
+
+    int padMode = 0;                 // 0: VOICES, 1: STEPS
+    bool learning = false;
+    std::vector<int> voiceNotes;     // learned: voiceNotes[v] plays voice v
+    std::vector<int> stepNotes;      // learned: stepNotes[s] is step s + 1
+    std::string pluginData;
 
     std::uint32_t lcdSeen = ~0u, ledSeen = ~0u;
     std::array<int, kLcdCells> lcdShown {};
     std::array<bool, kButtons> ledShown {};
     std::set<std::string> changed;   // keys to report to MPC (mpc_engine_changed)
 
-    std::optional<std::chrono::steady_clock::time_point> lastSuspend;
-    std::map<std::string, std::chrono::steady_clock::time_point> lastPress;
+    std::optional<Clock::time_point> lastSuspend;
+    std::map<std::string, Clock::time_point> lastPress;
     // VOLTKIT_DEBOUNCE_MS, VOLTKIT_RECENTRE_MS: the offline test turns them off.
     const int debounceMs = std::getenv("VOLTKIT_DEBOUNCE_MS") ? std::atoi(std::getenv("VOLTKIT_DEBOUNCE_MS")) : kDebounceMs;
     const int recentreMs = std::getenv("VOLTKIT_RECENTRE_MS") ? std::atoi(std::getenv("VOLTKIT_RECENTRE_MS")) : kRecentreMs;
+
+    std::mutex saverMutex;
+    std::condition_variable saverCv;
+    std::string toSave;
+    bool savePending = false;
+    bool quit = false;
+    std::thread saver;   // last: started after everything it uses
 };
 
 void* engineCreate(const char* dataDir)

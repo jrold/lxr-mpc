@@ -3,13 +3,17 @@
 // The LXR's SD card packed for VOLTKIT: the default card shipped with the
 // plug-in (data/card.vkc) and each track's card saved in the MPC project.
 //
-//   "VKC1", then per sector holding data: sector (u32 LE), packed length
+//   "VKC2", then per sector holding data: sector (u32 LE), packed length
 //   (u16 LE), packed bytes. Packing: a zero byte is followed by the length of
-//   its run of zeros (1..255); any other byte stands for itself.
+//   its run of zeros (1..255); any other byte stands for itself. A sector
+//   the same as an earlier one is its length 0xFFFF and that sector (u32 LE)
+//   instead (the firmware's 64 patterns and kits are mostly alike).
+//   "VKC1" is the same without those references.
 //
 // Copyright (C) 2026 Jason Rold. GPL-3.0-only.
 
 #include <cstdint>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -47,16 +51,26 @@ inline std::string packSector(const uint8_t* d)
     return out;
 }
 
+constexpr uint32_t kSameAs = 0xFFFF;
+
 // The machine's whole card.
 inline std::string pack(const VoltMachineApi& m)
 {
-    std::string out = "VKC1";
+    std::string out = "VKC2";
+    std::map<std::string, uint32_t> first;   // a sector's bytes -> where they first are
     uint8_t sector[VOLT_SECTOR_BYTES];
     for (uint32_t s = m.card_next(0); s < VOLT_CARD_SECTORS; s = m.card_next(s + 1))
     {
         m.card_read(s, sector);
-        const std::string p = packSector(sector);
         putLe(out, s, 4);
+        const auto [it, isNew] = first.emplace(std::string(reinterpret_cast<const char*>(sector), VOLT_SECTOR_BYTES), s);
+        if (!isNew)
+        {
+            putLe(out, kSameAs, 2);
+            putLe(out, it->second, 4);
+            continue;
+        }
+        const std::string p = packSector(sector);
         putLe(out, static_cast<uint32_t>(p.size()), 2);
         out += p;
     }
@@ -67,20 +81,35 @@ inline std::string pack(const VoltMachineApi& m)
 // written nothing past the fault.
 inline bool unpack(const std::string& in, const VoltMachineApi& m)
 {
-    if (in.size() < 4 || in.compare(0, 4, "VKC1") != 0)
+    if (in.size() < 4 || (in.compare(0, 4, "VKC1") != 0 && in.compare(0, 4, "VKC2") != 0))
         return false;
+    const bool refs = in[3] == '2';
     const auto byte = [&](size_t i) { return static_cast<uint8_t>(in[i]); };
+    const auto u32 = [&](size_t i) {
+        return byte(i) | byte(i + 1) << 8 | byte(i + 2) << 16 | static_cast<uint32_t>(byte(i + 3)) << 24;
+    };
     size_t at = 4;
     while (at < in.size())
     {
         if (at + 6 > in.size())
             return false;
-        const uint32_t s = byte(at) | byte(at + 1) << 8 | byte(at + 2) << 16 | static_cast<uint32_t>(byte(at + 3)) << 24;
+        const uint32_t s = u32(at);
         const size_t n = byte(at + 4) | byte(at + 5) << 8;
         at += 6;
-        if (s >= VOLT_CARD_SECTORS || at + n > in.size())
+        if (s >= VOLT_CARD_SECTORS)
             return false;
         uint8_t sector[VOLT_SECTOR_BYTES] = {};
+        if (refs && n == kSameAs)
+        {
+            if (at + 4 > in.size() || u32(at) >= s)
+                return false;
+            m.card_read(u32(at), sector);   // written already: references only point back
+            m.card_write(s, sector);
+            at += 4;
+            continue;
+        }
+        if (at + n > in.size())
+            return false;
         uint32_t o = 0;
         for (size_t i = at; i < at + n; ++i)
         {

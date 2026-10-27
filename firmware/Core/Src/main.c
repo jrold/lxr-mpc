@@ -174,6 +174,10 @@ void sd_formatRoutine()
 
 		sprintf(savefileNames[0][PROJECT_NAMES], "Init");
 		//preset_saveDrumsetSD(0);
+#ifdef VOLTKIT   // VOLTKIT (modified): the patterns as seq_init() clears them; this
+                 // runs before soundengine_init(), so they were saved never set up
+		seq_init();
+#endif
 		preset_saveProject(0);
 
 		//success

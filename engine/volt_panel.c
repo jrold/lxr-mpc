@@ -9,8 +9,12 @@
 #include "volt_machine.h"
 
 #include "menu/menu.h"
+#include "ff.h"
 
 uint8_t limitPotValue(int8_t diff, uint16_t paramNr);   /* menu.c (VOLTKIT: not static) */
+extern uint8_t preset_patDirty, preset_kitDirty;        /* presetManager.c */
+FRESULT preset_saveTmpPat(void);
+FRESULT preset_saveTmpKit(void);
 extern uint8_t saveScreenPots[4];
 
 int volt_panel_knob(int index, VoltKnob *out)
@@ -40,4 +44,20 @@ int volt_panel_knob(int index, VoltKnob *out)
     if (out->max < out->min)
         out->max = out->min;
     return 1;
+}
+
+/* What preset_processTimer() does once PRESET_SAVE_TIME has passed since a
+ * change: the pattern and kit to the card's tmp folder, which boot loads. */
+void volt_panel_flush(void)
+{
+    if (preset_patDirty == 1)
+    {
+        preset_patDirty = 0;
+        preset_saveTmpPat();
+    }
+    if (preset_kitDirty == 1)
+    {
+        preset_kitDirty = 0;
+        preset_saveTmpKit();
+    }
 }

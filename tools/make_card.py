@@ -11,8 +11,8 @@ as the plug-in needs them, as a user would on the CONFIG page:
   - the tempo to MID (1): the sequencer follows the MPC's MIDI clock;
   - each voice's MIDI note to 36..42 (the firmware's default puts all seven
     on note 48): the pads play one voice each.
-The card is packed in mpc/CardCodec.h's format (and written raw as card.img
-for voltkit-machine-test).
+The card is packed in mpc/CardCodec.h's format, VKC2 (and written raw as
+card.img for voltkit-machine-test).
 
 Copyright (C) 2026 Jason Rold. GPL-3.0-only.
 """
@@ -96,15 +96,20 @@ def main():
     for v in range(7):
         img[at + NOTE1 + v] = 36 + v   # PAR_MIDI_NOTE1..7
 
-    out = bytearray(b'VKC1')
+    out = bytearray(b'VKC2')
     used = 0
+    first = {}   # a sector's bytes -> where they first are
     for s in range(len(img) // SECTOR):
-        d = img[s * SECTOR:(s + 1) * SECTOR]
+        d = bytes(img[s * SECTOR:(s + 1) * SECTOR])
         if not any(d):
             continue
+        used += 1
+        if d in first:
+            out += struct.pack('<IHI', s, 0xFFFF, first[d])
+            continue
+        first[d] = s
         p = pack_sector(d)
         out += struct.pack('<IH', s, len(p)) + p
-        used += 1
     open(sys.argv[2], 'wb').write(out)
     print(f'{sys.argv[2]}: {used} sectors, {len(out)} bytes')
     if len(sys.argv) == 4:

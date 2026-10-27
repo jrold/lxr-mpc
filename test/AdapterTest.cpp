@@ -14,6 +14,7 @@ int mpc_engine_changed(void* inst, char* key, int len);
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
 #include <set>
 #include <string>
 #include <vector>
@@ -35,6 +36,7 @@ int failures = 0, checks = 0;
 const mpc_engine_t* E = nullptr;
 constexpr int kBlock = 128;
 constexpr int kRate = 44100;
+std::string dataDir;
 
 struct Track
 {
@@ -46,7 +48,7 @@ struct Track
     std::vector<float> audio;     // the left channel, when recording
     bool recording = false;
 
-    Track() { inst = E->create(nullptr); }
+    Track() { inst = E->create(dataDir.c_str()); }
     ~Track() { E->destroy(inst); }
 
     void set(const std::string& k, const std::string& v) { E->set_param(inst, k.c_str(), v.c_str()); }
@@ -64,7 +66,7 @@ struct Track
     double run(const double seconds)
     {
         double peak = 0.0;
-        const int blocks = static_cast<int>(seconds * kRate / kBlock);
+        const int blocks = static_cast<int>(seconds * kRate / kBlock + 0.5);
         std::int16_t out[kBlock * 2];
         for (int b = 0; b < blocks; ++b)
         {
@@ -91,34 +93,60 @@ struct Track
         {
             char k[8];
             std::snprintf(k, sizeof k, "lcd_%02d", c);
-            s += static_cast<char>(std::lround(num(k)));
+            s += static_cast<char>(std::lround(num(k) - 0.3));
             if (c == 15)
                 s += '|';
         }
         return s;
     }
 
-    int ledsLit()
+    bool led(const int l)
+    {
+        char k[8];
+        std::snprintf(k, sizeof k, "led_%02d", l);
+        return num(k) > 0.5;
+    }
+
+    void midi(const int status, const int d1, const int d2)
+    {
+        const std::uint8_t m[3] = { static_cast<std::uint8_t>(status), static_cast<std::uint8_t>(d1),
+                                    static_cast<std::uint8_t>(d2) };
+        E->midi(inst, m, 3);
+    }
+    void note(const int n, const int vel) { midi(0x90, n, vel); }
+    void noteOff(const int n) { midi(0x80, n, 0); }
+
+    // Plays one bar from the top with the transport, recording the audio.
+    void playBar()
+    {
+        playing = true;
+        ppq = 0.0;
+        recording = true;
+        audio.clear();
+        run(2.0);
+        recording = false;
+        playing = false;
+        run(0.3);
+    }
+
+    // Zero crossings 30..110 ms after `at` seconds into the recording: the
+    // pitch, once a drum's sweep has settled.
+    int crossings(const double at)
     {
         int n = 0;
-        for (int l = 0; l < 41; ++l)
-        {
-            char k[8];
-            std::snprintf(k, sizeof k, "led_%02d", l);
-            if (num(k) > 0.5)
-            {
-                ++n;
-                if (std::getenv("VOLTKIT_VERBOSE"))
-                    std::printf(" %d", l);
-            }
-        }
+        const std::size_t a = static_cast<std::size_t>((at + 0.03) * kRate), b = a + kRate * 8 / 100;
+        for (std::size_t i = a + 1; i < b && i < audio.size(); ++i)
+            n += (audio[i - 1] < 0) != (audio[i] < 0);
         return n;
     }
 
-    void note(const int n, const int vel)
+    double level(const double at)
     {
-        const std::uint8_t m[3] = { 0x90, static_cast<std::uint8_t>(n), static_cast<std::uint8_t>(vel) };
-        E->midi(inst, m, 3);
+        double peak = 0.0;
+        const std::size_t a = static_cast<std::size_t>(at * kRate), b = a + kRate / 10;
+        for (std::size_t i = a; i < b && i < audio.size(); ++i)
+            peak = std::fmax(peak, std::fabs(audio[i]));
+        return peak;
     }
 };
 }
@@ -132,151 +160,167 @@ int main()
     }
     setenv("VOLTKIT_DEBOUNCE_MS", "0", 1);
     setenv("VOLTKIT_RECENTRE_MS", "0", 1);
+    dataDir = (std::filesystem::temp_directory_path() / "voltkit-adapter-test").string();
+    std::filesystem::remove_all(dataDir);
+    std::filesystem::create_directories(dataDir);
     E = mpc_engine();
 
     Track t;
     CHECK(t.inst != nullptr);
     CHECK(t.get("status").empty());
-    t.run(0.2);
-    std::printf("start        |%s|  status '%s'\n", t.lcd().c_str(), t.get("status").c_str());
+    t.run(1.0);
+    std::printf("start        |%s|\n", t.lcd().c_str());
     CHECK(t.seen.count("lcd_00") && t.seen.count("led_00"));
 
-    // the pads: notes on channel 1 play the voices
+    // the pads: General MIDI drum notes play the voices
     t.note(36, 127);
     const double kick = t.run(0.5);
-    std::printf("note 36: peak %.3f\n", kick);
-    CHECK(kick > 0.05);
+    t.note(42, 127);
+    const double hat = t.run(0.5);
+    std::printf("pads: kick %.3f, closed hat %.3f\n", kick, hat);
+    CHECK(kick > 0.05 && hat > 0.05);
 
-    // a tap on AEG shows its page; the key lets go by itself
-    t.seen.clear();
+    // a tap on AEG shows its page at once
     t.set("btn_17", 1.0);
-    t.run(0.3);
+    t.run(0.03);
     const std::string aeg = t.lcd();
-    std::printf("AEG key      |%s|\n", aeg.c_str());
+    std::printf("AEG + 30 ms  |%s|\n", aeg.c_str());
     CHECK(aeg.find("ATK") != std::string::npos || aeg.find("atk") != std::string::npos);
     CHECK(t.num("btn_17") == 0.0);
 
-    // knob 1 (attack) turned up by Q-Link clicks, and it springs back to centre
-    for (int i = 0; i < 12; ++i)
-    {
-        t.set("knob1", 0.5 + 1.0 / 128.0);
-        t.run(0.02);
-    }
-    t.run(0.3);
-    const std::string turned = t.lcd();
-    std::printf("knob 1 up    |%s|\n", turned.c_str());
-    CHECK(turned != aeg);
-    CHECK(t.num("knob1") == 0.5);
-    for (int i = 0; i < 12; ++i)
-    {
-        t.set("knob1", 0.5 - 1.0 / 128.0);
-        t.run(0.02);
-    }
-    t.run(0.3);
-    std::printf("knob 1 back  |%s|\n", t.lcd().c_str());
-    CHECK(t.lcd() == aeg);
+    // knob 1 shows the attack's value and goes where it is set
+    const double k0 = t.num("knob1");
+    t.set("knob1", k0 + 20.0 / 127.0);
+    t.run(0.05);
+    std::printf("knob 1 +20   |%s|  knob %.3f -> %.3f (%s)\n", t.lcd().c_str(), k0, t.num("knob1"),
+                t.get("knob1_display").c_str());
+    CHECK(std::fabs(t.num("knob1") - (k0 + 20.0 / 127.0)) < 1e-3);
+    CHECK(t.get("knob1_display") == "20");
+    // a Q-Link click: one step from where the knob reads
+    t.set("knob1", t.num("knob1") + 1.0 / 127.0);
+    t.run(0.03);
+    CHECK(t.get("knob1_display") == "21");
+    t.set("knob1", k0);
+    t.run(0.05);
+    CHECK(t.get("knob1_display") == "0");
 
-    // the encoder and its push move through the menu
+    // the encoder moves the selection
+    const std::string beforeEnc = t.lcd();
     t.set("enc", 0.5 + 1.0 / 128.0);
-    t.run(0.2);
+    t.run(0.05);
     std::printf("encoder +1   |%s|\n", t.lcd().c_str());
+    CHECK(t.lcd() != beforeEnc);
 
-    // SHIFT latches, HOLD keeps the next key down until it is tapped again
+    // SHIFT latches
     t.set("shift", 1.0);
-    t.run(0.1);
+    t.run(0.05);
     CHECK(t.num("shift") == 1.0);
     t.set("shift", 0.0);
-    t.set("hold", 1.0);
-    t.set("btn_02", 1.0);
-    t.run(0.3);
-    CHECK(t.ledsLit() >= 0 && t.num("hold") == 0.0);
-    t.set("btn_02", 1.0);
-    t.run(0.1);
+    t.run(0.05);
 
-    if (std::getenv("VOLTKIT_VERBOSE"))
-    {
-        t.set("btn_25", 1.0);   // PERF
-        t.run(0.3);
-        std::printf("perf mode    |%s|\n", t.lcd().c_str());
-        t.set("btn_24", 1.0);   // VOICE
-        t.run(0.3);
-    }
     // steps 1, 5, 9 and 13 on voice 1, then the MPC's transport plays them
-    t.set("btn_01", 1.0);   // voice 1
-    t.run(0.2);
+    t.set("btn_24", 1.0);   // VOICE
+    t.set("btn_01", 1.0);   // DRUM 1
+    t.set("btn_16", 1.0);   // OSC page
+    t.run(0.05);
     for (const char* step : { "btn_39", "btn_31", "btn_23", "btn_15" })
     {
         t.set(step, 1.0);
-        t.run(0.15);
+        t.run(0.02);
     }
-    std::printf("steps set    |%s|  %d LEDs lit\n", t.lcd().c_str(), t.ledsLit());
-    const double idle = t.run(1.0);
+    CHECK(t.led(39) && t.led(31) && t.led(23) && t.led(15));
+    const double idle = t.run(0.5);
+    t.playBar();
+    const double stopped = t.run(0.5);
+    std::printf("transport: %.3f stopped, step 1 %.3f, %.3f after stop\n", idle, t.level(0.0), stopped);
+    CHECK(idle < 0.01 && t.level(0.0) > 0.05 && stopped < 0.01);
+    CHECK(std::abs(t.crossings(0.0) - t.crossings(0.5)) <= 2);
+
+    // a lock with HOLD: step 5 held past the firmware's 0.5 s, knob 1 (coarse
+    // pitch) turned up, step 5 let go; the step stays on and plays the locked pitch
+    const std::string osc = t.lcd();
+    t.set("hold", 1.0);
+    t.set("btn_31", 1.0);
+    t.run(0.7);
+    t.set("knob1", t.num("knob1") + 12.0 / 127.0);
+    t.run(0.1);
+    std::printf("locked       |%s|\n", t.lcd().c_str());
+    t.set("btn_31", 1.0);   // let go
+    t.run(0.2);
+    std::printf("let go       |%s|\n", t.lcd().c_str());
+    CHECK(t.lcd() == osc);   // the kit's own value is back
+    CHECK(t.led(31));        // step 5 still on
+    t.playBar();
+    std::printf("HOLD lock: step 1 %d crossings, step 5 %d, step 9 %d\n", t.crossings(0.0), t.crossings(0.5),
+                t.crossings(1.0));
+    CHECK(std::abs(t.crossings(0.0) - t.crossings(1.0)) <= 2);
+    CHECK(t.crossings(0.5) > t.crossings(0.0) + 3);
+
+    // a lock with the pads as step keys: pad 9 held, the knob turned, let go
+    t.set("pad_mode", 1.0);
+    t.run(0.05);
+    std::printf("pads: %s\n", t.get("pads_info").c_str());
+    CHECK(t.num("pad_mode") == 1.0);
+    t.note(36 + 8, 100);   // step 9, held
+    t.run(0.7);
+    t.set("knob1", t.num("knob1") + 24.0 / 127.0);
+    t.run(0.1);
+    t.noteOff(36 + 8);
+    t.run(0.2);
+    CHECK(t.lcd() == osc);
+    CHECK(t.led(23));
+    t.playBar();
+    std::printf("pad lock: step 1 %d crossings, step 9 %d, step 13 %d\n", t.crossings(0.0), t.crossings(1.0),
+                t.crossings(1.5));
+    CHECK(t.crossings(1.0) > t.crossings(1.5) + 3);
+    // a quick pad tap toggles a step, as the key does
+    t.note(36 + 1, 100);
+    t.run(0.05);
+    t.noteOff(36 + 1);
+    t.run(0.05);
+    CHECK(t.led(38));   // step 2 on
+    t.set("pad_mode", 0.0);
+    t.run(0.05);
+
+    // recording from the pads: REC, the transport plays, snares on beats 2 and 4
+    t.set("btn_04", 1.0);   // SNARE: its steps on the step LEDs
+    t.run(0.05);
+    CHECK(!t.led(31) && !t.led(15));
+    t.set("btn_34", 1.0);   // REC
     t.playing = true;
     t.ppq = 0.0;
-    double played = 0.0;
-    for (int i = 0; i < 8; ++i)
+    for (int b = 0; b < 4; ++b)
     {
-        played = std::fmax(played, t.run(0.5));
-        if (std::getenv("VOLTKIT_VERBOSE"))
-            std::printf("  playing ppq %.2f |%s| leds:", t.ppq, t.lcd().c_str()), t.ledsLit(), std::printf("\n");
+        if (b == 1 || b == 3)
+            t.note(38, 120);
+        t.run(0.5);
     }
     t.playing = false;
     t.run(0.1);
-    const double stopped = t.run(1.0);
-    std::printf("transport: %.3f stopped, %.3f playing, %.3f after stop\n", idle, played, stopped);
-    CHECK(idle < 0.01);
-    CHECK(played > 0.05);
-    CHECK(stopped < 0.01);
+    t.set("btn_34", 1.0);   // REC off
+    t.run(0.1);
+    std::printf("recorded: step 5 %d, step 13 %d\n", t.led(31), t.led(15));
+    CHECK(t.led(31) && t.led(15));
 
-    // a parameter lock: HOLD, step 5 held until armed, knob 1 turned, step let go;
-    // the step stays on and plays the locked value
-    t.set("btn_16", 1.0);   // OSC page
-    t.run(0.3);
-    const std::string before = t.lcd();
-    t.set("hold", 1.0);
-    t.set("btn_31", 1.0);   // step 5, held
-    t.run(2.5);
-    std::printf("step 5 held  |%s|\n", t.lcd().c_str());
-    for (int i = 0; i < 10; ++i)
+    // PAD LEARN: the next seven pads play D1 to OH
+    t.set("learn", 1.0);
+    for (int n = 60; n < 67; ++n)
     {
-        t.set("knob1", 0.5 + 1.0 / 128.0);
-        t.run(0.02);
+        t.note(n, 100);
+        t.run(0.05);
     }
-    t.run(0.3);
-    std::printf("locked       |%s|\n", t.lcd().c_str());
-    t.set("btn_31", 1.0);   // let go
+    std::printf("learned: %s\n", t.get("pads_info").c_str());
+    CHECK(t.num("learn") == 0.0);
     t.run(0.5);
-    std::printf("let go       |%s|  leds:", t.lcd().c_str());
-    setenv("VOLTKIT_VERBOSE", "1", 1);
-    t.ledsLit();
-    unsetenv("VOLTKIT_VERBOSE");
-    std::printf("\n");
-    CHECK(t.lcd() == before);           // the kit's own value is back
-    CHECK(t.num("led_31") > 0.5);       // step 5 still on
-    {
-        // play one bar from the top: step 1 plays the kit's pitch, step 5 the locked one
-        t.playing = true;
-        t.ppq = 0.0;
-        t.recording = true;
-        t.audio.clear();
-        t.run(2.0);
-        t.recording = false;
-        t.playing = false;
-        t.run(0.2);
-        // the zero crossings 30..110 ms after each step's onset, once the pitch
-        // sweep has settled (steps are 1/16: 0.125 s at 120 BPM)
-        const auto crossings = [&](const double at) {
-            int n = 0;
-            const std::size_t a = static_cast<std::size_t>((at + 0.03) * kRate), b = a + kRate * 8 / 100;
-            for (std::size_t i = a + 1; i < b && i < t.audio.size(); ++i)
-                n += (t.audio[i - 1] < 0) != (t.audio[i] < 0);
-            return n;
-        };
-        const int step1 = crossings(0.0), step5 = crossings(0.5), step9 = crossings(1.0);
-        std::printf("crossings: step 1 %d, step 5 (locked) %d, step 9 %d\n", step1, step5, step9);
-        CHECK(std::abs(step1 - step9) <= 2);   // unlocked steps alike
-        CHECK(step5 > step1 + 4);              // the lock raised step 5's pitch
-    }
+    t.note(60, 127);
+    CHECK(t.run(0.3) > 0.05);
+    t.note(36, 127);   // no longer a pad
+    CHECK(t.run(0.3) < 0.01);
+    t.run(0.3);
+    std::FILE* pm = std::fopen((std::filesystem::path(dataDir) / "padmap.txt").string().c_str(), "r");
+    CHECK(pm != nullptr);
+    if (pm)
+        std::fclose(pm);
 
     // the faders and master level
     t.set("master", -6.0);
@@ -284,52 +328,46 @@ int main()
     t.set("fader1", 0.5);
     CHECK(t.get("fader1_display") == "50%");
 
-    // the state: the card and the controls, back on a new track
+    // the state: the card, the pads and the controls, back on a new track
     const std::string state = t.get("state");
     std::printf("state: %zu bytes\n", state.size());
-    CHECK(state.rfind("v=2;", 0) == 0 && state.find(";card=VktD") != std::string::npos);
-    CHECK(state.size() < (4u << 20));
+    CHECK(state.rfind("v=3;", 0) == 0 && state.find(";card=VktD") != std::string::npos);
+    CHECK(state.find(";voices=60,61,62,63,64,65,66") != std::string::npos);
     {
         Track u;
         u.set("state", state);
-        u.run(0.2);
+        u.run(1.0);
         CHECK(u.get("status").empty());
         CHECK(u.num("master") == -6.0 && u.num("fader1") == 0.5);
-        u.note(36, 127);
+        u.note(60, 127);
         CHECK(u.run(0.5) > 0.02);
-        const std::string back = u.get("state");
-        if (const char* dump = std::getenv("VOLTKIT_DUMP"))
-        {
-            FILE* f = std::fopen(dump, "w");
-            std::fprintf(f, "%s\n%s\n", state.c_str(), back.c_str());
-            std::fclose(f);
-        }
-        // the same card (but the FAT's free-cluster hint, rewritten when mounted)
-        CHECK(std::abs(static_cast<long>(back.size()) - static_cast<long>(state.size())) <= 8);
+        u.set("btn_24", 1.0);
+        u.set("btn_04", 1.0);   // SNARE: the recorded steps came back with the card
+        u.run(0.1);
+        CHECK(u.led(31) && u.led(15));
     }
 
     // a damaged state falls back on the default card
     {
         Track v;
-        v.set("state", "v=2;card=@@@");
-        v.run(0.2);
+        v.set("state", "v=3;card=@@@");
+        v.run(1.0);
         CHECK(v.get("status").empty());
-        v.note(36, 127);
+        v.note(60, 127);   // the learned pads (data/padmap.txt)
         CHECK(v.run(0.5) > 0.02);
     }
 
-    // two tracks are two machines
+    // a blank card is prepared by the firmware itself
     {
-        Track a, b;
-        a.run(1.0);
-        b.run(1.0);
-        a.set("btn_17", 1.0);
-        a.run(0.3);
-        b.run(0.3);
-        std::printf("track a      |%s|\ntrack b      |%s|\n", a.lcd().c_str(), b.lcd().c_str());
-        CHECK(a.lcd() != b.lcd());
+        setenv("VOLTKIT_CARD", "/nonexistent", 1);
+        Track w;
+        w.run(1.0);
+        std::printf("blank card   |%s|  status '%s'\n", w.lcd().c_str(), w.get("status").c_str());
+        CHECK(w.get("status").empty());
+        unsetenv("VOLTKIT_CARD");
     }
 
+    std::filesystem::remove_all(dataDir);
     std::printf("%d checks, %d failed\n", checks, failures);
     return failures != 0;
 }

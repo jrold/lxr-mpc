@@ -52,6 +52,7 @@ typedef struct VoltMachineApi
     void (*card_read)(uint32_t sector, uint8_t *data);
     uint32_t (*card_next)(uint32_t from);   /* the next sector >= from holding data, or VOLT_CARD_SECTORS */
     uint32_t (*card_version)(void);         /* changes whenever the firmware writes the card */
+    void (*flush)(void);                    /* the firmware's autosave of the pattern and kit, now */
 
     /* Starts the firmware and runs it to its main loop. 0 when it runs. */
     int (*boot)(void);

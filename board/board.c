@@ -47,6 +47,7 @@ extern void DMA1_Stream4_IRQHandler(void);
 extern void DMA1_Stream5_IRQHandler(void);
 extern void USART3_IRQHandler(void);
 int volt_panel_knob(int index, VoltKnob *out);
+void volt_panel_flush(void);
 
 /* ---- clocks and time */
 volatile uint32_t volt_primask;
@@ -820,6 +821,12 @@ static void api_card_write(uint32_t s, const uint8_t *data) { volt_card_write(s,
 static void api_card_read(uint32_t s, uint8_t *data) { volt_card_read(s, data); }
 static uint32_t api_card_version(void) { return card_ver; }
 
+static void api_flush(void)
+{
+    if (booted && fw_alive && !fw_running)
+        volt_panel_flush();
+}
+
 static uint32_t api_card_next(uint32_t from)
 {
     while (from < VOLT_CARD_SECTORS && !card[from])
@@ -981,7 +988,7 @@ __attribute__((visibility("default"))) const VoltMachineApi *volt_machine_api(vo
 {
     static const VoltMachineApi api = {
         VOLT_MACHINE_API_VERSION,
-        api_card_write, api_card_read, api_card_next, api_card_version,
+        api_card_write, api_card_read, api_card_next, api_card_version, api_flush,
         api_boot, api_render,
         api_key, api_tap, api_encoder, api_encoder_push, api_fader, api_knob, api_knob_to, api_midi,
         api_lcd, api_lcd_glyphs, api_lcd_version, api_leds, api_led_version,
