@@ -117,8 +117,11 @@ void sd_formatRoutine()
 	lcd_setcursor(0,2);
 	lcd_string("data erased?");
 
+#ifndef VOLTKIT   // VOLTKIT (modified): a blank card is prepared without asking; the
+                  // virtual board delivers no interrupt while the firmware spins here
 	while(encode_readButton()==0);
 	while(encode_readButton()==1);
+#endif
 
 	lcd_clear();
 	lcd_home();
@@ -127,7 +130,9 @@ void sd_formatRoutine()
 	lcd_setcursor(0,2);
 	lcd_string("card?");
 
+#ifndef VOLTKIT   // VOLTKIT (modified): as above
 	while(encode_readButton()==0);
+#endif
 
 	//make fs
 	FRESULT res;
@@ -179,7 +184,11 @@ void sd_formatRoutine()
 		lcd_setcursor(0,2);
 		lcd_string("Please reboot.");
 
+#ifdef VOLTKIT   // VOLTKIT (modified): the reboot asked for, done by the plug-in
+		NVIC_SystemReset();
+#else
 		while(1);
+#endif
 	}
 }
 /*
@@ -917,6 +926,10 @@ lcd_process_display_interrupt = 1;
   HAL_NVIC_EnableIRQ(EXTI9_5_IRQn);
   while (1)
   {
+#ifdef VOLTKIT   // VOLTKIT (modified): each pass of the main loop is a step of the virtual board
+  void volt_board_main_pass(void);
+  volt_board_main_pass();
+#endif
   checkMainLoc = -14;
 
 	  //check SD card

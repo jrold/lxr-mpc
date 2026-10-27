@@ -3708,7 +3708,10 @@ static void menu_processSpecialCaseValues(uint16_t paramNr/*, const uint8_t *val
 	}
 }
 //-----------------------------------------------------------------
-static uint8_t limitPotValue(int8_t diff, uint16_t paramNr)
+#ifndef VOLTKIT   // VOLTKIT (modified): the plug-in reads a knob's range through it
+static
+#endif
+uint8_t limitPotValue(int8_t diff, uint16_t paramNr)
 {
 	uint8_t originalValue;
 	if(paramNr >= END_OF_SOUND_PARAMETERS)

@@ -1,12 +1,18 @@
 #!/usr/bin/env python3
 """The default card VOLTKIT's tracks start with (data/card.vkc).
 
-    python3 tools/make_card.py <card.img> data/card.vkc
+    voltkit-machine-test --format init.img
+    python3 tools/make_card.py init.img data/card.vkc [card.img]
 
-<card.img> is lxr02-recomp's card (4.web/site/card.img.gz, unzipped): a 64 MB
-FAT32 card with project 0 and its 11 kits. The tempo in PROJ00/GLO.CFG is set
-to MID (1), so the sequencer follows the MPC's MIDI clock (0, EXT, follows the
-clock input jack); then the card is packed in mpc/CardCodec.h's format.
+init.img is the card the LXR firmware prepares itself on a blank card (its
+format routine: a FAT32 volume, the global settings and the Init project
+with its init kit). Two of its global settings (PROJ00/GLO.CFG) are then set
+as the plug-in needs them, as a user would on the CONFIG page:
+  - the tempo to MID (1): the sequencer follows the MPC's MIDI clock;
+  - each voice's MIDI note to 36..42 (the firmware's default puts all seven
+    on note 48): the pads play one voice each.
+The card is packed in mpc/CardCodec.h's format (and written raw as card.img
+for voltkit-machine-test).
 
 Copyright (C) 2026 Jason Rold. GPL-3.0-only.
 """
@@ -15,19 +21,23 @@ import sys
 
 SECTOR = 512
 SECTORS = 131072
+NOTE1 = 22   # PAR_MIDI_NOTE1 - PAR_BEGINNING_OF_GLOBALS (Parameters.h): its byte in GLO.CFG
 
 
 def fat32_file(img, path):
     """(first byte offset, size) of a file given as ['DIR', 'NAME.EXT'], from the root."""
-    bps, spc, rsv, nfats = struct.unpack_from('<HBHB', img, 11)
-    fat_sectors = struct.unpack_from('<I', img, 36)[0]
-    cluster = struct.unpack_from('<I', img, 44)[0]
-    data = (rsv + nfats * fat_sectors) * bps
+    vol = 0
+    if img[82:87] != b'FAT32':   # a partition table: the first partition's volume
+        vol = struct.unpack_from('<I', img, 0x1C6)[0] * SECTOR
+    bps, spc, rsv, nfats = struct.unpack_from('<HBHB', img, vol + 11)
+    fat_sectors = struct.unpack_from('<I', img, vol + 36)[0]
+    cluster = struct.unpack_from('<I', img, vol + 44)[0]
+    data = vol + (rsv + nfats * fat_sectors) * bps
     if bps != SECTOR:
         sys.exit('make_card: not a 512-byte-sector card')
 
     def next_cluster(c):
-        return struct.unpack_from('<I', img, rsv * bps + 4 * c)[0] & 0x0FFFFFFF
+        return struct.unpack_from('<I', img, vol + rsv * bps + 4 * c)[0] & 0x0FFFFFFF
 
     for i, name in enumerate(path):
         want = name.upper()
@@ -71,7 +81,7 @@ def pack_sector(d):
 
 
 def main():
-    if len(sys.argv) != 3:
+    if len(sys.argv) not in (3, 4):
         sys.exit(__doc__)
     img = bytearray(open(sys.argv[1], 'rb').read())
     if len(img) > SECTORS * SECTOR or len(img) % SECTOR:
@@ -79,8 +89,12 @@ def main():
     at, size = fat32_file(img, ['PROJ00', 'GLO.CFG'])
     if size < 1:
         sys.exit('make_card: GLO.CFG is empty')
-    print(f'tempo {img[at]} -> MID')
+    if size < NOTE1 + 7:
+        sys.exit('make_card: GLO.CFG is too short')
+    print(f'tempo {img[at]} -> MID, voice notes {list(img[at + NOTE1:at + NOTE1 + 7])} -> 36..42')
     img[at] = 1   # PAR_BPM, the first global: 1 = MIDI clock
+    for v in range(7):
+        img[at + NOTE1 + v] = 36 + v   # PAR_MIDI_NOTE1..7
 
     out = bytearray(b'VKC1')
     used = 0
@@ -93,6 +107,8 @@ def main():
         used += 1
     open(sys.argv[2], 'wb').write(out)
     print(f'{sys.argv[2]}: {used} sectors, {len(out)} bytes')
+    if len(sys.argv) == 4:
+        open(sys.argv[3], 'wb').write(img)
 
 
 if __name__ == '__main__':

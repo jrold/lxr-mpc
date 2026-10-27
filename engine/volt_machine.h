@@ -2,12 +2,11 @@
  * volt_machine.h: the whole LXR-02, as a library for VOLTKIT.
  *
  * The LXR V2 firmware (firmware/, Erica Synths, GPL-3.0) runs unmodified but
- * for the marked VOLTKIT changes, on a virtual board (platform/vboard.c,
- * after lxr02-recomp's): its sequencer, menus, kits and patterns, and its
- * sound engine. The host feeds the board's inputs (the 40 panel buttons and
- * PAGE DOWN, the 4 knobs and 6 faders, the encoder, the DIN MIDI input) and
- * reads its outputs (the 2x16 LCD, the button LEDs, both stereo DACs). The SD
- * card lives in memory, sector by sector.
+ * for the marked VOLTKIT changes, on VOLTKIT's virtual board (board/): ST's
+ * HAL and the STM32F765's peripherals as the firmware uses them, and the
+ * LXR-02's panel hardware (the shift-register keys and LEDs, the HD44780
+ * display, the endless knobs and faders on the ADC, the encoder, the MIDI
+ * UART, the two I2S DACs, the SD card).
  *
  * The firmware keeps its state in globals: a process holds one machine per
  * loaded copy of this library (mpc/EngineLoader.h). Not thread-safe: one call
@@ -24,44 +23,57 @@
 extern "C" {
 #endif
 
-#define VOLT_MACHINE_API_VERSION 1
-#define VOLT_SAMPLE_RATE 44100      /* the LXR's DACs run at 44140.6 Hz; the host's rate is close enough */
+#define VOLT_MACHINE_API_VERSION 2
+#define VOLT_SAMPLE_RATE 44100      /* the DACs run at 44140.6 Hz (PLLI2S); the host's rate is close enough */
 #define VOLT_CARD_SECTORS 131072u   /* a 64 MB card */
 #define VOLT_SECTOR_BYTES 512u
-#define VOLT_BUTTONS 41             /* shift-register buttons 0..39, 40 = PAGE DOWN */
-#define VOLT_ADC_KNOBS 8            /* adc 0..7: four endless knobs, two wipers each */
-#define VOLT_ADC_FADERS 6           /* adc 8..13: the faders */
+#define VOLT_BUTTONS 41             /* the firmware's button numbers: 0..39 shift registers, 40 PAGE DOWN */
+#define VOLT_KNOBS 4
+#define VOLT_FADERS 6
+
+/* What sits under one of the four knobs: the parameter the display shows
+ * above it, as the firmware keeps it. */
+typedef struct VoltKnob
+{
+    int param;   /* the firmware's parameter number; -1: nothing there */
+    int value;
+    int min, max;
+} VoltKnob;
 
 typedef struct VoltMachineApi
 {
     int version;
 
     /* The card. Before boot: load it sector by sector (unwritten sectors
-     * read as zeros). Any time: read it back for a save. */
+     * read as zeros). Any time: read it back for a save. A blank card is
+     * formatted at boot with the firmware's Init project; boot again to use
+     * it (card_version tells). */
     void (*card_write)(uint32_t sector, const uint8_t *data);
     void (*card_read)(uint32_t sector, uint8_t *data);
     uint32_t (*card_next)(uint32_t from);   /* the next sector >= from holding data, or VOLT_CARD_SECTORS */
     uint32_t (*card_version)(void);         /* changes whenever the firmware writes the card */
 
-    /* Starts the firmware and runs it until it plays (about 2 s of virtual
-     * time: the boot screen and the project load). 0 when it is running. */
+    /* Starts the firmware and runs it to its main loop. 0 when it runs. */
     int (*boot)(void);
 
-    /* Runs the firmware for `frames` frames and writes both DACs' sum. */
+    /* Runs the machine for `frames` frames and writes both DACs' sum. */
     void (*render)(float *left, float *right, int frames);
 
-    /* Inputs, applied at the start of the firmware's next 64-frame block. */
-    void (*button)(int index, int down);    /* 0..40 */
-    void (*adc)(int index, int value);      /* 0..13, the raw 16-bit reading */
-    void (*encoder)(int detents);           /* + clockwise */
-    void (*encoder_button)(int down);
-    void (*midi)(const uint8_t *bytes, int count);   /* the DIN MIDI input */
+    /* The panel. Each takes effect at the firmware's next main-loop pass. */
+    void (*key)(int index, int down);       /* hold a key down, or let it go */
+    void (*tap)(int index);                 /* down for one scan, up on the next */
+    void (*encoder)(int detents);           /* + clockwise; 4 ms a detent, as the firmware samples it */
+    void (*encoder_push)(void);             /* a press the firmware's debounce accepts */
+    void (*fader)(int index, int value);    /* 0..4095 */
+    int (*knob)(int index, VoltKnob *out);  /* what is under a knob now; 0 if nothing */
+    void (*knob_to)(int index, int value);  /* turn a knob until its parameter reads value */
+    void (*midi)(const uint8_t *bytes, int count);   /* the DIN MIDI input, at 31250 baud */
 
-    /* Outputs. */
+    /* What it shows. */
     const uint8_t *(*lcd)(void);            /* 128 bytes of display RAM: line 1 at 0, line 2 at 0x40 */
     const uint8_t *(*lcd_glyphs)(void);     /* 64 bytes: the 8 custom 5x8 characters */
     uint32_t (*lcd_version)(void);          /* changes when either does */
-    const uint8_t *(*leds)(void);           /* 6 bytes: the 5 shift-register bytes (bit = button), PAGE DOWN */
+    const uint8_t *(*leds)(void);           /* 6 bytes: the 5 shift-register bytes (bit = key), PAGE DOWN */
     uint32_t (*led_version)(void);
 } VoltMachineApi;
 

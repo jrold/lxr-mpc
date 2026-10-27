@@ -30,15 +30,15 @@ endif()
 set(ROOT "${CMAKE_CURRENT_SOURCE_DIR}/..")
 set(FW "${ROOT}/firmware/Core")
 
-# ---- the engine: the whole LXR V2 firmware on the virtual board
+# ---- the engine: the whole LXR V2 firmware on VOLTKIT's virtual board
 # (engine/volt_machine.h). The firmware's own sources, compiled unmodified but
-# for the VOLTKIT changes; platform/ stands in for the STM32 and its HAL.
+# for the VOLTKIT changes; board/ is the STM32, its HAL and the panel.
 set(FWR "${ROOT}/firmware")
-set(PLAT "${ROOT}/platform")
+set(BOARD "${ROOT}/board")
 set(FW_SOURCES
     Core/Src/main.c Core/Src/stm32f7xx_it.c Core/Src/stm32f7xx_hal_msp.c Core/Src/system_stm32f7xx.c Core/Src/flash_if.c
     Core/Src/IO/adcPots.c Core/Src/IO/DIO.c Core/Src/IO/uart.c
-    Core/Src/lcd.c Core/Src/encoder.c Core/Src/buttonHandler.c Core/Src/ledHandler.c Core/Src/graphic.c
+    Core/Src/delay.c Core/Src/lcd.c Core/Src/encoder.c Core/Src/buttonHandler.c Core/Src/ledHandler.c Core/Src/graphic.c
     Core/Src/frontPanelParser.c Core/Src/Parameters.c
     Core/Src/menu/Cc2Text.c Core/Src/menu/copyClearTools.c Core/Src/menu/menu.c Core/Src/menu/screensaver.c
     Core/Src/Preset/initKit.c Core/Src/Preset/presetManager.c
@@ -61,29 +61,15 @@ file(GLOB FW_GLOBBED RELATIVE "${FWR}"
 list(APPEND FW_SOURCES ${FW_GLOBBED})
 list(TRANSFORM FW_SOURCES PREPEND "${FWR}/")
 
-# the peripheral and core-peripheral remaps, generated from ST's and ARM's headers
-set(GEN "${CMAKE_BINARY_DIR}/gen")
-file(MAKE_DIRECTORY "${GEN}")
-find_package(Python3 REQUIRED COMPONENTS Interpreter)
-execute_process(COMMAND ${Python3_EXECUTABLE} -I "${PLAT}/tools/gen-remap.py"
-                    "${FWR}/Drivers/CMSIS/Device/ST/STM32F7xx/Include/stm32f765xx.h" "${GEN}/lxr_remap.h" "${GEN}/lxr_remap.c"
-                COMMAND_ERROR_IS_FATAL ANY OUTPUT_QUIET)
-execute_process(COMMAND ${Python3_EXECUTABLE} -I "${PLAT}/tools/gen-core-portable.py" "${FWR}/Drivers/CMSIS/Include" "${GEN}"
-                COMMAND_ERROR_IS_FATAL ANY OUTPUT_QUIET)
-configure_file("${PLAT}/portable/lxr_intrinsics.h" "${GEN}/lxr_intrinsics.h" COPYONLY)
-
-add_library(voltkit_engine SHARED
-    ${FW_SOURCES}
-    ${PLAT}/vboard.c ${PLAT}/hal.c ${PLAT}/hal_unused.c
-    ${GEN}/lxr_remap.c ${GEN}/lxr_core_objects.c)
-target_compile_definitions(voltkit_engine PRIVATE VOLTKIT STM32F765xx USE_HAL_DRIVER DWT_STM32_DELAY_H)
+add_library(voltkit_engine SHARED ${FW_SOURCES} ${BOARD}/board.c ${BOARD}/hal.c ${ROOT}/engine/volt_panel.c)
+target_compile_definitions(voltkit_engine PRIVATE VOLTKIT STM32F765xx USE_HAL_DRIVER)
 set_source_files_properties(${FWR}/Core/Src/main.c PROPERTIES COMPILE_DEFINITIONS
     "main=lxr_firmware_main;_itcm_text_end=_itcm_text_start;FIRMWARE_VERSION=\" 1.7\"")
-# the generated headers and the shims first: they stand in for the STM32's
+# board/include first: its stm32f7xx.h and core_cm7.h stand in for ST's and ARM's
 target_include_directories(voltkit_engine PRIVATE
-    "${GEN}" "${PLAT}/shim" "${PLAT}" "${ROOT}/engine" "${FWR}/Core/Inc"
+    "${BOARD}/include" "${BOARD}" "${ROOT}/engine" "${FWR}/Core/Inc"
     "${FWR}/Drivers/STM32F7xx_HAL_Driver/Inc" "${FWR}/Drivers/STM32F7xx_HAL_Driver/Inc/Legacy"
-    "${FWR}/Drivers/CMSIS/Device/ST/STM32F7xx/Include" "${FWR}/Drivers/CMSIS/Include"
+    "${FWR}/Drivers/CMSIS/Device/ST/STM32F7xx/Include"
     "${FWR}/Middlewares/Third_Party/FatFs/src" "${FWR}/FATFS/App" "${FWR}/FATFS/Target"
     "${FWR}/Middlewares/JS/STM32_USB_Device_Library/Core/Inc" "${FWR}/Middlewares/JS/STM32_USB_Device_Library/Class/CDC/Inc"
     "${FWR}/USB_DEVICE_MIDI/App" "${FWR}/USB_DEVICE_MIDI/Target")
@@ -96,7 +82,7 @@ target_compile_options(voltkit_engine PRIVATE -std=gnu11 -O3 -w -ffast-math -fre
 if(APPLE)
     # Apple's clang defines __weak (Objective-C); the HAL's own __weak must win.
     target_compile_options(voltkit_engine PRIVATE -U__weak -Wno-deprecated-declarations
-        -include "${PLAT}/portable/volt_no_sections.h")
+        -include "${BOARD}/include/volt_no_sections.h")
 endif()
 set_target_properties(voltkit_engine PROPERTIES
     PREFIX ""
