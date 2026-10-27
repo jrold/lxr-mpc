@@ -78,7 +78,7 @@ void drainChanged(void* inst)
 int main()
 {
     // The test's own engine library and a scratch data folder.
-    setenv("VOLTKIT_ENGINE", VOLTKIT_TEST_ENGINE, 1);
+    setenv("VOLTKIT_ENGINE", VOLTKIT_TEST_ENGINE, 0);   // unless given (on the device)
     setenv("VOLTKIT_DEBOUNCE_MS", "0", 1);
     const auto data = std::filesystem::temp_directory_path() / ("voltkit-test-" + std::to_string(::getpid()));
     std::filesystem::create_directories(data);
@@ -130,10 +130,10 @@ int main()
     // An LFO keeps its kind of target when its voice changes.
     set(a, "d1_ldest", "21");   // filter cutoff
     CHECK(get(a, "d1_ldest") == "21");
-    CHECK(get(a, "d1_ldest_display") == "D1 Filter Cutoff");
+    CHECK(get(a, "d1_ldest_display") == "D1 Flt Cutoff");
     set(a, "d1_lvoice", "3");   // snare
     CHECK(get(a, "d1_lvoice") == "3");
-    CHECK(get(a, "d1_ldest_display") == "SN Filter Cutoff");
+    CHECK(get(a, "d1_ldest_display") == "SN Flt Cutoff");
     set(a, "d1_ldest", "0");
     CHECK(get(a, "d1_ldest_display") == "Off");
 

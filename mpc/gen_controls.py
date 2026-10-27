@@ -140,7 +140,7 @@ for _name, _menu in (("wave", "MENU_WAVEFORM"), ("trans", "MENU_TRANS"), ("filte
 
 # A modulation target's name: what our own controls call that parameter.
 PAGE_ABBREV = {"OSC": "Osc", "AMP": "Amp", "MOD": "Mod", "FM": "FM", "METAL": "Metal", "CLICK": "Click",
-               "FILTER": "Filter", "LFO": "LFO", "MIX": "Mix"}
+               "FILTER": "Flt", "LFO": "LFO", "MIX": "Mix"}
 
 
 # ------------------------------------------------------------ the voices
@@ -359,14 +359,15 @@ theme_btn_on=1a8fc0"""
 
 def control_line(key, c, cx, cy, when):
     w = " when=%s" % when if when else ""
+    label = c.name.upper()
     if c.kind in ("menu", "out", "lfovoice", "veldest"):
         n = len(OPTIONS.get(c.opts, [])) if c.kind != "veldest" else 99
         if n <= 2:
-            return "enum_h  cx=%d cy=%d key=%s sw=120 sh=56%s" % (cx, cy, key, w)
-        return "popup   cx=%d cy=%d w=260 h=64 key=%s%s" % (cx, cy, key, w)
+            return "enum_h  cx=%d cy=%d key=%s label=\"%s\" sw=120 sh=56%s" % (cx, cy, key, label, w)
+        return "popup   cx=%d cy=%d w=240 h=64 key=%s label=\"%s\"%s" % (cx, cy, key, label, w)
     if c.kind == "lfodest":
-        return "stepper cx=%d cy=%d w=300 h=64 label=\"\" key=%s prev=%s_prev next=%s_next tsize=22%s" % (
-            cx, cy, key, key, key, w)
+        return "stepper cx=%d cy=%d w=256 h=60 label=\"%s\" key=%s prev=%s_prev next=%s_next tsize=19%s" % (
+            cx, cy, label, key, key, key, w)
     return "knob    cx=%d cy=%d r=54 key=%s bw=150 ns=20 vs=26%s" % (cx, cy, key, w)
 
 
@@ -426,22 +427,24 @@ def main():
                "knob    cx=166 cy=330 r=54 key=volume bw=150 ns=20 vs=26",
                "knob    cx=166 cy=560 r=54 key=crush_all bw=150 ns=20 vs=26",
                "frame   x=332 y=188 w=932 h=520 title=\"FX BUS\"",
-               "knob    cx=480 cy=330 r=54 key=fx_mix bw=150 ns=20 vs=26"]
+               "knob    cx=462 cy=440 r=54 key=fx_mix bw=150 ns=20 vs=26"]
     fx_q = ["fx_mix", "volume", "crush_all"]
     fx_cols = [480, 740, 1000]
     for i, (fx, knobs, sel) in enumerate(FX_TYPES):
         when = "fx_type:%s" % fx
+        # each effect's own panel (it also carries the effect's knob artwork)
+        layout.append("frame   x=592 y=240 w=656 h=456 title=\"%s\" when=%s" % (fx.upper(), when))
         params.append(param_entry(sel.suffix, sel, 0, "FX"))
         table.append('{"%s", %d, Kind::menu, 0},' % (sel.suffix, PAR[sel.par]))
-        layout.append(control_line(sel.suffix, sel, 870, 330, when))
+        layout.append(control_line(sel.suffix, sel, 920, 360, when))
         for j, (suffix, name) in enumerate(knobs):
             key = "fx_" + suffix
             p = PAR["PAR_FX_P%d" % (j + 1)]
             params.append({"key": key, "name": "FX %s" % name, "min": 0, "max": 127, "default": kit_value("PAR_FX_P%d" % (j + 1)),
                            "display": "int", "dynamic_display": True, "nudge_pct": 100 / 127})
             table.append('{"%s", %d, Kind::fxp, %d},' % (key, p, i + 1))
-            x = [480, 700, 920, 1140][j]
-            layout.append("knob    cx=%d cy=560 r=54 key=%s bw=150 ns=20 vs=26 when=%s" % (x, key, when))
+            x = [676, 838, 1000, 1162][j]
+            layout.append("knob    cx=%d cy=540 r=54 key=%s bw=150 ns=20 vs=26 when=%s" % (x, key, when))
             fx_q.append(key)
     layout.append("qlinks \"FX\" = %s" % ",".join(fx_q[:16]))
 

@@ -1,0 +1,29 @@
+{
+  "name": "VOLTKIT",
+  "vendor": "voltkit",
+  "uid": "VltK",
+  "version": 100,
+  "so": "voltkit.so",
+  "params": "params.json",
+  "layout": "layout.conf",
+  "cc": false,
+  "targets": [
+    "aarch64"
+  ],
+  "defines": {
+    "SAMPLE_ACCURATE": 1,
+    "HAS_SONG_POS": 1,
+    "PARAM_TEXT_MAX": 96,
+    "MODULE_SUBDIR": "\"data\""
+  },
+  "build": {
+    "root": ".",
+    "sources": [
+      "VoltkitMpc.cpp",
+      "EngineLoader.cpp"
+    ],
+    "cflags": [],
+    "libs": []
+  },
+  "skin_post": "skin/skin_post.py"
+}
