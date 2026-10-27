@@ -241,6 +241,7 @@ static uint32_t adc_dma_len, adc_left_aligned;
 
 static double pot_angle[VOLT_KNOBS];
 static int knob_target[VOLT_KNOBS], knob_active[VOLT_KNOBS], knob_last[VOLT_KNOBS];
+static int knob_param[VOLT_KNOBS];   /* the parameter a turn is for: another under the knob ends it */
 static int knob_stall[VOLT_KNOBS], knob_dir[VOLT_KNOBS];
 
 static struct { uint8_t byte; uint64_t at; } midi_queue[4096];   /* each byte, and when it may arrive */
@@ -695,9 +696,9 @@ static int knob_step(int k)
     VoltKnob info;
     if (!knob_active[k])
         return 0;
-    if (!volt_panel_knob(k, &info) || info.value == knob_target[k])
+    if (!volt_panel_knob(k, &info) || info.value == knob_target[k] || info.param != knob_param[k])
     {
-        knob_active[k] = 0;
+        knob_active[k] = 0;   /* there, or the voice or page changed under it */
         return 0;
     }
     if (info.value == knob_last[k])
@@ -986,6 +987,7 @@ static void api_knob_to(int index, int value)
     if (value > info.max)
         value = info.max;
     knob_target[index] = value;
+    knob_param[index] = info.param;
     knob_last[index] = info.value;
     knob_stall[index] = 0;
     knob_active[index] = value != info.value;

@@ -21,10 +21,10 @@ an Open MPC VST2 plug-in with a native touchscreen skin, like the BOOM family.
   value of the parameter above it. The MPC's four **Q-Links** turn these four
   knobs, on every page (no other Q-Link bank does anything);
 - **ALL** (see below);
-- the seven voice keys, and the page keys OSC, AEG, MOD, FM, CLICK, FILTER,
-  LFO and MIX. A page key again shows that page's second screen (a `>` at the
-  display's top right says there is one), and again its first. Each key has
-  its LED.
+- the page keys OSC, AEG, MOD, FM, CLICK, FILTER, LFO and MIX, and under
+  them the seven voice keys. A page key again shows that page's second screen
+  (a `>` at the display's top right says there is one), and again its first.
+  Each key has its LED.
 
 **MIX** has the six voice faders (the drums, snare, clap/cymbal and hats) and
 a master level. **SETUP** has the pads.
@@ -33,7 +33,8 @@ a master level. **SETUP** has the pads.
 
 - **Pads** play the seven voices: General MIDI drum notes, or the pads
   **PAD LEARN** learned (remembered for new tracks). Record them on the MPC
-  like any instrument.
+  like any instrument. A pad played shows its voice on the panel, on the
+  same page.
 - **ALL**: tap it on, and a knob turned moves its parameter on every voice
   that has the same parameter in that place: by as much from where each was,
   or, for a choice of a few settings (a waveform), to the same one. Tap it

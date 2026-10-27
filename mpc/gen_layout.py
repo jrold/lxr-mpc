@@ -5,8 +5,8 @@ the LXR-02's voices as a voice module.
 
 PANEL: the 2x16 display with the four endless knobs under its four columns
 (the MPC's Q-Links turn them, on every page), ALL, and two rows of keys: the
-seven voices, and the pages (OSC AEG MOD FM CLICK FILTER LFO MIX; a page's
-key again shows its second screen). Each key has its LED above it. MIX has
+pages (OSC AEG MOD FM CLICK FILTER LFO MIX; a page's key again shows its
+second screen), and the seven voices. Each key has its LED above it. MIX has
 the six faders and the output level; SETUP the pads.
 
 The keys' button numbers are the firmware's (buttonHandler.h); the adapter
@@ -46,7 +46,7 @@ KNOB_CY, KNOB_R = 300, 40
 ALL_CX, ALL_CY, ALL_W, ALL_H = 1040, 262, 330, 132   # ALL, right of the display
 TITLE_Y = 136
 
-ROWS = {"voice": (VOICE_ROW, 446, 112), "select": (SELECT_ROW, 622, 112)}
+ROWS = {"select": (SELECT_ROW, 446, 112), "voice": (VOICE_ROW, 622, 112)}
 KEY_SPACE = 12          # between two keys of a row
 
 # SETUP

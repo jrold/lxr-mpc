@@ -18,7 +18,8 @@
 //                    MIDI channel and note; LFO's targets) turns as without
 //                    ALL. knobN_all (not a control) reads whether ALL takes knob N
 //   fader1..fader6   the six faders; master the output level
-//   learn, pads_clear, pads_info   PAD LEARN: the pads that play the voices
+//   learn, pads_clear, pads_info   PAD LEARN: the pads that play the voices; a
+//                    pad played shows its voice's page
 //   led_NN, lcd_00..lcd_31   the keys' LEDs and the 2x16 display's characters:
 //                    shown, never set (the engine reports them)
 //
@@ -73,6 +74,7 @@ constexpr int kLcdCells = 32;
 constexpr int kVoices = 7;
 constexpr int kVoiceNote = 36;                  // the card's voice notes: 36..42 (tools/make_card.py)
 constexpr int kChoiceRange = 16;                // ALL: a parameter with fewer settings is a choice, set alike
+constexpr int kPickScan = VOLT_SAMPLE_RATE / 100;   // frames: a voice key tapped is scanned by then
 constexpr const char* kCardFile = "card.vkc";   // the default card, beside the engine library
 constexpr const char* kPadMapFile = "padmap.txt";   // the learned pads, for new tracks
 
@@ -230,6 +232,15 @@ public:
             if (on && learning)
                 learnNote(note);
             const int v = voiceFor(note);
+            // the voice played is the one shown (its key: button 1 + v); a pad again
+            // before the firmware has scanned that tap doesn't tap it twice
+            if (v >= 0 && on && machine->voice() >= 0 && machine->voice() != v
+                && (v != pickedVoice || framesRendered - pickedAt > kPickScan))
+            {
+                keyTap(1 + v);
+                pickedVoice = v;
+                pickedAt = framesRendered;
+            }
             if (v >= 0)
             {
                 const std::uint8_t out[3] = { static_cast<std::uint8_t>(on ? 0x90 : 0x80),
@@ -854,6 +865,8 @@ private:
     std::array<double, VOLT_FADERS> faders { 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 };
     double masterDb = 0.0;
 
+    int pickedVoice = -1;            // the voice a pad last showed, and when (frames rendered)
+    long long pickedAt = 0;
     bool allOn = false;
     std::map<int, int> allFrom;      // ALL: each parameter it moved, as it was
     bool learning = false;

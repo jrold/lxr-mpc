@@ -158,6 +158,14 @@ int main()
     const double hat = t.run(0.5);
     std::printf("pads: kick %.3f, closed hat %.3f\n", kick, hat);
     CHECK(kick > 0.05 && hat > 0.05);
+    // a pad shows its voice
+    CHECK(t.led(6) && !t.led(1));
+    t.note(38, 100);
+    t.run(0.1);
+    CHECK(t.led(4) && !t.led(6));
+    t.set("btn_01", 1.0);
+    t.run(0.1);
+    CHECK(t.led(1));
 
     // a tap on AEG shows its page at once
     t.set("btn_17", 1.0);
@@ -245,6 +253,22 @@ int main()
         after[v] = t.knobsOf(v, 16);
     CHECK(after == before);
     std::printf("ALL off: %s\n", after == before ? "every voice back" : "NOT BACK");
+    // a knob still turning when a pad shows another voice stops there: the
+    // new voice's parameter isn't turned
+    {
+        const auto snare = t.knobsOf(4, 16);
+        t.knobsOf(1, 16);
+        t.set("knob1", 1.0);   // far: still turning
+        t.note(38, 100);
+        t.run(0.5);
+        CHECK(t.led(4));
+        const auto now = t.knobsOf(4, 16);
+        std::printf("pad mid-turn: snare coarse %d -> %d\n", snare.at(1), now.at(1));
+        CHECK(now == snare);
+        t.knobsOf(1, 16);
+        t.set("knob1", (before[1][1] - 0.0) / 127.0);
+        t.run(0.3);
+    }
     // without ALL, a knob is one voice's
     t.knobsOf(1, 16);
     t.set("knob1", t.num("knob1") + 5.0 / 127.0);
