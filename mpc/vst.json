@@ -12,7 +12,7 @@
   ],
   "defines": {
     "SAMPLE_ACCURATE": 1,
-    "HAS_SONG_POS": 0,
+    "HAS_SONG_POS": 1,
     "PARAM_TEXT_MAX": 96,
     "MODULE_SUBDIR": "\"data\""
   },

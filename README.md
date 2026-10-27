@@ -34,7 +34,8 @@ a master level. **SETUP** has the pads.
 - **Pads** play the seven voices: General MIDI drum notes, or the pads
   **PAD LEARN** learned (remembered for new tracks). Record them on the MPC
   like any instrument. A pad played shows its voice on the panel, on the
-  same page.
+  same page, while the MPC is stopped (playing, its sequence plays the same
+  notes the pads do, and the panel stays where you put it).
 - **ALL**: tap it on, and a knob turned moves its parameter on every voice
   that has the same parameter in that place: by as much from where each was,
   or, for a choice of a few settings (a waveform), to the same one. Tap it

@@ -45,6 +45,7 @@ struct Track
 {
     void* inst = nullptr;
     std::set<std::string> seen;   // changed keys reported
+    bool playing = false;         // the MPC's transport
 
     Track() { inst = E->create(dataDir.c_str()); }
     ~Track() { E->destroy(inst); }
@@ -68,6 +69,7 @@ struct Track
         std::int16_t out[kBlock * 2];
         for (int b = 0; b < blocks; ++b)
         {
+            E->song_pos(inst, 0.0, 120.0, playing ? 1 : 0, kBlock);
             E->render(inst, out, kBlock);
             for (const std::int16_t s : out)
                 peak = std::fmax(peak, std::abs(s) / 32768.0);
@@ -166,6 +168,14 @@ int main()
     t.set("btn_01", 1.0);
     t.run(0.1);
     CHECK(t.led(1));
+    // ... but not while the MPC plays: its sequence plays the same notes
+    t.playing = true;
+    t.run(0.05);
+    t.note(38, 100);
+    t.run(0.1);
+    CHECK(t.led(1) && !t.led(4));
+    t.playing = false;
+    t.run(0.05);
 
     // a tap on AEG shows its page at once
     t.set("btn_17", 1.0);

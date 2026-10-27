@@ -19,7 +19,8 @@
 //                    ALL. knobN_all (not a control) reads whether ALL takes knob N
 //   fader1..fader6   the six faders; master the output level
 //   learn, pads_clear, pads_info   PAD LEARN: the pads that play the voices; a
-//                    pad played shows its voice's page
+//                    pad played shows its voice's page while the MPC is stopped
+//                    (playing, its sequence plays the same notes the pads do)
 //   led_NN, lcd_00..lcd_31   the keys' LEDs and the 2x16 display's characters:
 //                    shown, never set (the engine reports them)
 //
@@ -234,7 +235,7 @@ public:
             const int v = voiceFor(note);
             // the voice played is the one shown (its key: button 1 + v); a pad again
             // before the firmware has scanned that tap doesn't tap it twice
-            if (v >= 0 && on && machine->voice() >= 0 && machine->voice() != v
+            if (v >= 0 && on && !mpcPlaying && machine->voice() >= 0 && machine->voice() != v
                 && (v != pickedVoice || framesRendered - pickedAt > kPickScan))
             {
                 keyTap(1 + v);
@@ -353,6 +354,9 @@ public:
             return writeText(buf, len, status);
         return 0;
     }
+
+    // Before each render: whether the MPC's transport is playing.
+    void songPos(double, double, const int playing, int) { mpcPlaying = playing != 0; }
 
     void render(std::int16_t* out, const int frames)
     {
@@ -867,6 +871,7 @@ private:
 
     int pickedVoice = -1;            // the voice a pad last showed, and when (frames rendered)
     long long pickedAt = 0;
+    bool mpcPlaying = false;         // the MPC's transport (songPos)
     bool allOn = false;
     std::map<int, int> allFrom;      // ALL: each parameter it moved, as it was
     bool learning = false;
@@ -925,8 +930,12 @@ int engineGetParam(void* inst, const char* key, char* buf, const int len)
     return static_cast<Instance*>(inst)->getParam(key, buf, len);
 }
 void engineRender(void* inst, std::int16_t* out, const int frames) { static_cast<Instance*>(inst)->render(out, frames); }
+void engineSongPos(void* inst, const double ppq, const double bpm, const int playing, const int frames)
+{
+    static_cast<Instance*>(inst)->songPos(ppq, bpm, playing, frames);
+}
 const mpc_engine_t kEngine { engineCreate, engineDestroy, engineMidi, engineSetParam, engineGetParam, engineRender, nullptr,
-                             nullptr };
+                             engineSongPos };
 }
 
 extern "C" const mpc_engine_t* mpc_engine(void)
