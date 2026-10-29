@@ -1,0 +1,15 @@
+MPC source backup — 29 October 2026
+
+Restore this repository at the backup commit and branch recorded in the cleanup receipt.
+Current source branch: lxr02-emulation
+
+Build from the project root with: bash mpc/build.sh
+All five MPC projects fetch sd88me/mpc-vst-plugins at commit 28da1ce2a75f33b5ef802d0fadb0293862aed8a5.
+The fetched checkout is generated locally; it is not committed as a nested repository.
+Tools present during backup: Zig 0.17.0, CMake 4.4.2, Ninja 1.13.2, Python 3.14.7, Apple LLVM 21.
+The build scripts do not pin every tool or Python package version. Existing packaged builds are retained as GitHub draft-release assets.
+Deploying is a separate, explicit hardware operation; restoring or cloning does not deploy anything.
+
+The bundled firmware/ source is modified GPL source and must be restored with this repository, including data/card.vkc. Build packages are named VOLTKIT. Hardware functionality was not retested for this backup.
+
+Verification for this backup checks source/history and downloaded artifact hashes. It does not certify new functionality.
